@@ -1,0 +1,61 @@
+# Affiliate Autopilot — รันทั้งระบบด้วย: docker compose up -d
+# ระบบ automation affiliate Shopee Food (พี่กอล์ฟ)
+#   backend  : FastAPI + Dashboard (WebApp)      → http://localhost:8088
+#   n8n      : automation / scraper / scheduler  → http://localhost:5678
+#   db       : PostgreSQL (เก็บข้อมูล n8n + backend)
+services:
+  backend:
+    build: ./backend
+    container_name: affiliate-backend
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./data:/app/data          # sqlite + สื่อที่ generate (ภาพ/วีดีโอ)
+      - ./adb:/root/.android       # แชร์ adb keys ให้คุม phone farm (ถ้าใช้)
+    # ต่อ phone farm ผ่าน ADB over network (adb tcpip) — ใส่ HOST_ADB=host.docker.internal:5037
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: affiliate-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Asia/Bangkok
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=db
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=n8n
+      - DB_POSTGRESDB_PASSWORD=n8n_pass
+      # backend อยู่ใน network เดียวกัน เรียกผ่านชื่อ service ได้เลย: http://backend:8088
+      - BACKEND_URL=http://backend:8088
+    volumes:
+      - ./n8n/workflows:/home/node/workflows   # import workflow จากที่นี่
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - db
+      - backend
+
+  db:
+    image: postgres:16-alpine
+    container_name: affiliate-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=n8n
+      - POSTGRES_PASSWORD=n8n_pass
+      - POSTGRES_DB=n8n
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  n8n_data:
+  db_data:

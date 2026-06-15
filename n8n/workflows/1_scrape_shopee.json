@@ -1,0 +1,66 @@
+{
+  "name": "1 — Scrape Shopee Food → Ingest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "hours", "hoursInterval": 6 } ] }
+      },
+      "id": "trigger",
+      "name": "ทุก 6 ชม.",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [ 240, 300 ]
+    },
+    {
+      "parameters": {
+        "url": "https://shopee.co.th/api/v4/search/search_items?by=relevancy&keyword=%E0%B8%A3%E0%B9%89%E0%B8%B2%E0%B8%99%E0%B8%AD%E0%B8%B2%E0%B8%AB%E0%B8%B2%E0%B8%A3%20%E0%B8%AD%E0%B8%B8%E0%B8%94%E0%B8%A3%E0%B8%98%E0%B8%B2%E0%B8%99%E0%B8%B5&limit=50&newest=0&page_type=search",
+        "options": {
+          "response": { "response": { "neverError": true } },
+          "timeout": 20000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "Mozilla/5.0" }
+          ]
+        }
+      },
+      "id": "fetch",
+      "name": "ดึงร้าน (ปรับ endpoint/proxy ที่นี่)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 480, 300 ],
+      "notes": "หมายเหตุ: Shopee เปลี่ยน endpoint บ่อย + กัน bot. แนะนำต่อ residential proxy หรือใช้ Apify/บริการ scrape แล้ว map ผลให้ตรง schema ขั้นถัดไป"
+    },
+    {
+      "parameters": {
+        "jsCode": "// แปลงผลดิบ Shopee → schema ของ backend (ปรับ field ตามจริง)\nconst raw = $input.first().json;\nconst items = (raw.items || raw.data?.items || []);\nconst stores = items.map(it => {\n  const b = it.item_basic || it;\n  return {\n    name: b.name || b.shop_name || 'ร้านไม่ทราบชื่อ',\n    area: 'อุดรธานี',\n    rating: Number((b.item_rating?.rating_star ?? b.rating ?? 0).toFixed(1)),\n    review_count: b.item_rating?.rating_count?.[0] ?? b.review_count ?? 0,\n    price_range: b.price ? `~${Math.round(b.price/100000)} บาท` : '',\n    menu: (b.name || '').split(' ').slice(0,4),\n    image_urls: b.image ? [`https://cf.shopee.co.th/file/${b.image}`] : [],\n    shopee_url: b.shopid ? `https://shopee.co.th/product/${b.shopid}/${b.itemid}` : '',\n    affiliate_link: ''\n  };\n});\nreturn [{ json: { stores } }];"
+      },
+      "id": "map",
+      "name": "แปลงเป็น schema",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 720, 300 ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:8088/api/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "ingest",
+      "name": "ส่งเข้า Backend (/api/ingest)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 960, 300 ]
+    }
+  ],
+  "connections": {
+    "ทุก 6 ชม.": { "main": [ [ { "node": "ดึงร้าน (ปรับ endpoint/proxy ที่นี่)", "type": "main", "index": 0 } ] ] },
+    "ดึงร้าน (ปรับ endpoint/proxy ที่นี่)": { "main": [ [ { "node": "แปลงเป็น schema", "type": "main", "index": 0 } ] ] },
+    "แปลงเป็น schema": { "main": [ [ { "node": "ส่งเข้า Backend (/api/ingest)", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

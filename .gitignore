@@ -1,0 +1,22 @@
+# secrets / config
+.env
+
+# data + generated media (ภาพ/วีดีโอที่ Gemini สร้าง + sqlite)
+data/
+adb/
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# n8n local state
+n8n/.n8n/
+
+# editor / os
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

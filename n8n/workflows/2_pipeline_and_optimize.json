@@ -1,0 +1,48 @@
+{
+  "name": "2 — Run pipeline + Auto-optimize",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "hours", "hoursInterval": 6 } ] }
+      },
+      "id": "trigger",
+      "name": "ทุก 6 ชม.",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [ 240, 300 ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8088/api/run-all",
+        "sendQuery": true,
+        "queryParameters": { "parameters": [ { "name": "limit", "value": "20" } ] }
+      },
+      "id": "runall",
+      "name": "รันครบวงร้านใหม่ (Claude+Gemini+โพสต์)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 480, 240 ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8088/api/auto-optimize"
+      },
+      "id": "optimize",
+      "name": "Auto-optimize (หยุดร้าน CTR ต่ำ)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 480, 380 ]
+    }
+  ],
+  "connections": {
+    "ทุก 6 ชม.": {
+      "main": [ [
+        { "node": "รันครบวงร้านใหม่ (Claude+Gemini+โพสต์)", "type": "main", "index": 0 },
+        { "node": "Auto-optimize (หยุดร้าน CTR ต่ำ)", "type": "main", "index": 0 }
+      ] ]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}
