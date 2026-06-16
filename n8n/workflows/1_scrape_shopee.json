@@ -45,7 +45,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://backend:8088/api/ingest",
+        "url": "=http://127.0.0.1:8088/api/ingest",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}"

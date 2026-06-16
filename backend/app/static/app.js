@@ -2,14 +2,17 @@
 const $ = (s) => document.querySelector(s);
 const api = async (path, opts) => {
   const r = await fetch("/api" + path, opts);
-  if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
   return r.json();
 };
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const toast = (msg, err = false) => {
   const t = $("#toast");
   t.textContent = msg; t.className = "toast" + (err ? " err" : "");
-  setTimeout(() => (t.className = "toast hidden"), 2600);
+  setTimeout(() => (t.className = "toast hidden"), 2800);
 };
+
+let showAddForm = false;
 
 // ---------------- tabs
 document.querySelectorAll(".tabs button").forEach((b) =>
@@ -23,6 +26,10 @@ document.querySelectorAll(".tabs button").forEach((b) =>
 );
 
 // ---------------- actions
+$("#btn-add").onclick = () => {
+  showAddForm = !showAddForm;
+  document.querySelector('.tabs button[data-tab="stores"]').click();
+};
 $("#btn-runall").onclick = async () => {
   const r = await api("/run-all", { method: "POST" });
   toast(`เริ่มรัน ${r.count} ร้าน — Claude+Gemini กำลังทำงานเบื้องหลัง`);
@@ -37,6 +44,19 @@ $("#btn-opt").onclick = async () => {
   toast(`Auto-optimize: หยุด ${r.actions.length} ร้าน CTR ต่ำ`); loadAll();
 };
 
+// ---------------- banner (real vs mock)
+async function loadBanner() {
+  const k = await api("/keys/status");
+  if (k.real_mode) {
+    const brain = k.content_provider === "gemini" ? "Gemini (ฟรี)" : "Claude";
+    $("#banner").innerHTML = `<div class="banner real">🟢 REAL MODE — เขียนด้วย ${brain} · ภาพ Gemini${k.meta ? " · Meta พร้อม" : ""} · โพสต์: ${k.posting_mode}</div>`;
+  } else if (k.content_provider === "gemini") {
+    $("#banner").innerHTML = `<div class="banner mock">🟡 โหมด MOCK — ใส่ <b>GEMINI_API_KEY</b> (ฟรี) ใน .env แล้วรัน run_local.ps1 ใหม่ → ทดสอบจริงฟรี ฿0</div>`;
+  } else {
+    $("#banner").innerHTML = `<div class="banner mock">🟡 โหมด MOCK — อยากทดสอบฟรี: ตั้ง <b>CONTENT_PROVIDER=gemini</b> + ใส่ <b>GEMINI_API_KEY</b> ใน .env (ไม่ต้องใช้ Claude)</div>`;
+  }
+}
+
 // ---------------- KPIs
 async function loadKpis() {
   const d = await api("/dashboard");
@@ -47,6 +67,8 @@ async function loadKpis() {
       <div class="s"><span class="ok">${d.stores_active} active</span> · <span class="bad">${d.stores_paused} paused</span></div></div>
     <div class="kpi"><div class="v">${d.posts_total}</div><div class="l">โพสต์</div>
       <div class="s bad">${d.posts_failed} ล้มเหลว</div></div>
+    <div class="kpi"><div class="v">${(d.comments_posted ?? 0).toLocaleString()}</div><div class="l">คอมเมนต์ลิงก์</div>
+      <div class="s dim">affiliate link วางแล้ว</div></div>
     <div class="kpi"><div class="v">${d.impressions.toLocaleString()}</div><div class="l">Impressions</div></div>
     <div class="kpi"><div class="v">${(d.ctr * 100).toFixed(2)}%</div><div class="l">CTR เฉลี่ย</div></div>
     <div class="kpi"><div class="v">฿${d.content_cost_baht}</div><div class="l">ค่า AI เขียน (สะสม)</div></div>
@@ -55,23 +77,93 @@ async function loadKpis() {
       <div class="s dim">โหมด: ${c.posting_mode} · ${c.phones} เครื่อง · วีดีโอ ${c.video ? "เปิด" : "ปิด"}</div></div>`;
 }
 
-// ---------------- stores
+// ---------------- stores (+ add form)
+function addFormHTML() {
+  if (!showAddForm) return "";
+  return `<div class="card addform">
+    <h4>เพิ่มร้านเอง</h4>
+    <div class="formgrid">
+      <input id="f-name" placeholder="ชื่อร้าน *" />
+      <input id="f-area" placeholder="ย่าน เช่น อุดรธานี" />
+      <input id="f-rating" type="number" step="0.1" placeholder="เรตติ้ง เช่น 4.7" />
+      <input id="f-reviews" type="number" placeholder="จำนวนรีวิว เช่น 120" />
+      <input id="f-price" placeholder="ช่วงราคา เช่น 40-80 บาท" />
+      <input id="f-menu" placeholder="เมนู (คั่นด้วย , )" />
+      <input id="f-link" placeholder="affiliate link" />
+      <input id="f-shopee" placeholder="Shopee URL (ถ้ามี)" />
+    </div>
+    <div class="row" style="margin-top:10px">
+      <span class="muted">เพิ่มเองไม่ติดเกณฑ์กรอง · หรืออัปโหลด CSV ด้านขวา</span>
+      <span>
+        <label class="btn-file">📄 อัปโหลด CSV<input id="f-csv" type="file" accept=".csv" hidden /></label>
+        <button class="go" id="f-submit">บันทึก + รันร้านนี้</button>
+      </span>
+    </div>
+  </div>`;
+}
+
 async function renderStores() {
   const s = await api("/stores");
-  $("#tab-stores").innerHTML = `<div class="grid">${s.map((x) => `
+  $("#tab-stores").innerHTML = addFormHTML() + `<div class="grid">${s.map((x) => `
     <div class="card">
-      <h4>${x.name}</h4>
-      <div class="meta">${x.area || "—"} · ⭐${x.rating} (${x.review_count} รีวิว)</div>
-      <div class="meta">เมนู: ${(x.menu || []).slice(0, 3).join(", ") || "—"}</div>
+      <h4>${esc(x.name)}</h4>
+      <div class="meta">${esc(x.area) || "—"} · ⭐${x.rating} (${x.review_count} รีวิว)</div>
+      <div class="meta">เมนู: ${esc((x.menu || []).slice(0, 3).join(", ")) || "—"}</div>
+      <div class="meta">${x.affiliate_link ? "🔗 มีลิงก์" : '<span class="bad">⚠ ยังไม่มีลิงก์</span>'}</div>
       <div class="row">
         <span class="badge ${x.status}">${x.status}${x.low_ctr_days ? " " + x.low_ctr_days + "วัน" : ""}</span>
         <button class="go" onclick="runStore(${x.id})">▶ รันร้านนี้</button>
       </div>
-    </div>`).join("") || '<p class="muted">ยังไม่มีร้าน — ให้ n8n scraper ส่งเข้ามา หรือกด "รันครบวง"</p>'}</div>`;
+    </div>`).join("") || '<p class="muted">ยังไม่มีร้าน — กด "+ เพิ่มร้าน" / อัปโหลด CSV / ให้ n8n scraper ส่งเข้ามา</p>'}</div>`;
+
+  if (showAddForm) {
+    $("#f-submit").onclick = submitAddStore;
+    $("#f-csv").onchange = submitCsv;
+  }
+}
+async function submitAddStore() {
+  const body = {
+    name: $("#f-name").value.trim(),
+    area: $("#f-area").value.trim(),
+    rating: parseFloat($("#f-rating").value) || 0,
+    review_count: parseInt($("#f-reviews").value) || 0,
+    price_range: $("#f-price").value.trim(),
+    menu: $("#f-menu").value.split(",").map((x) => x.trim()).filter(Boolean),
+    affiliate_link: $("#f-link").value.trim(),
+    shopee_url: $("#f-shopee").value.trim(),
+  };
+  if (!body.name) return toast("ใส่ชื่อร้านก่อน", true);
+  try {
+    const r = await api("/stores/add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    toast(`เพิ่ม "${r.name}" แล้ว — กำลังรันร้านนี้`);
+    await api(`/stores/${r.id}/run`, { method: "POST" });
+    showAddForm = false;
+    setTimeout(loadAll, 4000);
+  } catch (e) { toast(e.message, true); }
+}
+async function submitCsv(ev) {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const fd = new FormData(); fd.append("file", file);
+  try {
+    const r = await api("/ingest/csv", { method: "POST", body: fd });
+    toast(`CSV: เพิ่ม ${r.added} ร้าน / ข้าม ${r.skipped}`);
+    loadAll();
+  } catch (e) { toast(e.message, true); }
 }
 window.runStore = async (id) => {
   await api(`/stores/${id}/run`, { method: "POST" });
   toast("เริ่มรันร้านนี้ — รอ Claude+Gemini สักครู่"); setTimeout(loadAll, 4000);
+};
+window.makeReel = async (id, label = "A") => {
+  const voice = document.getElementById(`voice-sel-${id}`)?.value || "female";
+  const vlabel = voice === "male" ? "เสียงผู้ชาย" : "เสียงผู้หญิง";
+  toast(`กำลังรวมคลิป ${label} (${vlabel})... (~20-40 วิ)`);
+  try {
+    const r = await api(`/stores/${id}/reel?label=${label}&voice=${voice}`, { method: "POST" });
+    toast(`รวม ${r.scenes} ฉาก (${label} · ${vlabel}) เสร็จแล้ว!`);
+    render("content");
+  } catch (e) { toast(e.message, true); }
 };
 
 // ---------------- content + A/B
@@ -83,12 +175,26 @@ async function renderContent() {
     if (!c || !c.variants.length) continue;
     const ab = await api(`/abtest/${st.id}`).catch(() => ({ verdict: {} }));
     html += `<div class="card" style="margin-bottom:14px">
-      <h4>${st.name}</h4>
+      <div class="row"><h4>${esc(st.name)}</h4>
+        <span>
+          <select id="voice-sel-${st.id}" class="voicesel">
+            <option value="female">👩 เสียงผู้หญิง</option>
+            <option value="male">👨 เสียงผู้ชาย</option>
+          </select>
+          <button class="go" onclick="makeReel(${st.id},'A')">🎬 รวมคลิป A</button>
+          <button class="go" onclick="makeReel(${st.id},'B')">🎬 รวมคลิป B</button>
+        </span></div>
+      ${c.reel_url ? `<div class="reelwrap"><div class="meta" style="margin-bottom:4px">คลิปรวม (montage) — โพสต์ได้เลย</div>
+        <video class="reel" src="${c.reel_url}" controls loop playsinline></video></div>` : ""}
       <div class="preview">${c.variants.map((v) => `
         <div class="v">
-          ${v.media_url ? `<img class="media" src="${v.media_url}" />` : '<div class="media"></div>'}
-          <div class="meta"><b>${v.platform}·${v.label}</b></div>
-          <div style="font-size:12px">${v.hook}</div>
+          ${!v.media_url ? '<div class="media"></div>'
+            : v.media_type === "video"
+              ? `<video class="media" src="${v.media_url}" muted loop playsinline controls></video>`
+              : `<img class="media" src="${v.media_url}" />`}
+          <div class="meta"><b>${v.platform}·${v.label}</b>${v.media_type === "video" ? ' <span class="chip posted">วีดีโอ</span>' : ""}</div>
+          <div style="font-size:12px">${esc(v.hook)}</div>
+          ${v.first_comment ? `<div class="fc">💬 ${esc(v.first_comment)}</div>` : ""}
         </div>`).join("")}</div>
       ${renderAB(ab)}
     </div>`;
@@ -113,15 +219,16 @@ function renderAB(ab) {
 // ---------------- posts
 async function renderPosts() {
   const p = await api("/posts");
-  $("#tab-posts").innerHTML = `<table><tr><th>เวลา</th><th>Platform</th><th>วิธี</th><th>บัญชี</th><th>สถานะ</th><th>ID</th></tr>
+  $("#tab-posts").innerHTML = `<table><tr><th>เวลา</th><th>Platform</th><th>วิธี</th><th>บัญชี</th><th>สถานะ</th><th>คอมเมนต์ลิงก์</th><th>ID</th></tr>
     ${p.map((x) => `<tr>
       <td class="muted">${x.posted_at ? new Date(x.posted_at).toLocaleString("th-TH") : "—"}</td>
       <td>${x.platform}</td>
       <td><span class="chip ${x.method}">${x.method}</span></td>
-      <td class="muted">${x.account}</td>
+      <td class="muted">${esc(x.account)}</td>
       <td><span class="chip ${x.status}">${x.status}</span></td>
-      <td class="muted">${x.external_id || x.error || ""}</td>
-    </tr>`).join("") || '<tr><td colspan=6 class="muted">ยังไม่มีโพสต์</td></tr>'}</table>`;
+      <td>${x.comment_status ? `<span class="chip ${x.comment_status === "posted" ? "posted" : "failed"}">${x.comment_status}</span>` : "—"}</td>
+      <td class="muted">${esc(x.external_id || x.error || "")}</td>
+    </tr>`).join("") || '<tr><td colspan=7 class="muted">ยังไม่มีโพสต์</td></tr>'}</table>`;
 }
 
 // ---------------- platform performance
@@ -139,11 +246,11 @@ async function renderPlatform() {
 // ---------------- flow diagram
 function renderFlow() {
   const steps = [
-    ["1. ดึงร้าน (n8n scraper)", "n8n รันทุก 6 ชม. → scrape Shopee Food → POST /api/ingest → กรอง rating≥4.5 + รีวิว≥20"],
-    ["2. Claude เขียนคอนเทนต์", "ต่อร้าน → analysis + A/B variant (3 platform × 2 = 6 ชิ้น) + ตารางโพสต์ → JSON"],
+    ["1. ดึงร้าน (n8n scraper / เพิ่มเอง / CSV)", "n8n รันทุก 6 ชม. → POST /api/ingest → กรอง rating≥4.5 + รีวิว≥20 · หรือเพิ่มเอง/อัปโหลด CSV"],
+    ["2. Claude เขียนคอนเทนต์", "ต่อร้าน → analysis + A/B variant (6 ชิ้น) + คอมเมนต์แรก (affiliate link) + ตารางโพสต์"],
     ["3. Gemini ทำสื่อ", "Nano Banana สร้างภาพ 9:16 (หรือ Veo ทำวีดีโอ) ต่อ variant"],
-    ["4. โพสต์อัตโนมัติ (Hybrid)", "FB/IG ผ่าน Graph API · YouTube Data API · ตกหล่น→phone farm 6 เครื่อง · affiliate link คอมเมนต์แรก · สุ่ม delay 15–45 นาที"],
-    ["5. Dashboard + Auto-optimize", "เก็บ metric → ตัดสิน A/B (ผู้ชนะต่อ platform) → ร้าน CTR ต่ำ 3 วันติด หยุดเอง ประหยัด cost"],
+    ["4. โพสต์อัตโนมัติ (Hybrid)", "FB/IG Graph API · YouTube · ตกหล่น→phone farm · วาง affiliate link เป็นคอมเมนต์แรกทันที"],
+    ["5. Dashboard + Auto-optimize", "เก็บ metric → ตัดสิน A/B (ผู้ชนะต่อ platform) → ร้าน CTR ต่ำ 3 วันติด หยุดเอง"],
   ];
   $("#tab-flow").innerHTML = steps.map((s) =>
     `<div class="flowstep"><b>${s[0]}</b><div class="muted" style="margin-top:4px">${s[1]}</div></div>`).join("");
@@ -155,7 +262,7 @@ function render(tab) {
      platform: renderPlatform, flow: renderFlow }[tab] || (() => {}))();
 }
 async function loadAll() {
-  await loadKpis().catch((e) => toast(e.message, true));
+  await Promise.all([loadBanner().catch(() => {}), loadKpis().catch((e) => toast(e.message, true))]);
   const active = document.querySelector(".tabs button.active").dataset.tab;
   render(active);
 }

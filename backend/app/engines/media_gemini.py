@@ -82,8 +82,17 @@ def generate_video(prompt: str) -> str:
         return _placeholder(prompt, "video")
 
 
-def make_media(image_prompt: str, video_prompt: str) -> tuple[str, str]:
-    """คืน (media_type, path) — วีดีโอถ้าเปิด ENABLE_VIDEO ไม่งั้นภาพ."""
-    if settings.enable_video:
-        return "video", generate_video(video_prompt)
-    return "image", generate_image(image_prompt)
+def make_media(image_prompt: str, video_prompt: str, hook: str = "") -> tuple[str, str, str]:
+    """คืน (media_type, media_path, image_path) ตาม VIDEO_MODE.
+    image_path = ภาพต้นฉบับ เก็บไว้ใช้ทำคลิปรวม (montage) ภายหลัง.
+    image  = ภาพนิ่ง 9:16 (ฟรี) · ffmpeg = ภาพ AI → วีดีโอ Reels ฟรี · veo = Veo (เสียเงิน)."""
+    mode = settings.video_mode
+    if mode == "veo" or (settings.enable_video and mode == "image"):
+        return "video", generate_video(video_prompt), ""
+    if mode == "ffmpeg":
+        img = generate_image(image_prompt)              # ภาพฟรีจาก Gemini ก่อน
+        from . import video_ffmpeg
+        vid = video_ffmpeg.image_to_reel(img, hook)     # แปลงเป็นวีดีโอ
+        return ("video", vid, img) if vid else ("image", img, img)
+    img = generate_image(image_prompt)
+    return "image", img, img

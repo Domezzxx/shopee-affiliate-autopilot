@@ -1,0 +1,88 @@
+{
+  "id": "afltautopilotfull01",
+  "name": "Affiliate Autopilot — Full Pipeline (5 Layers)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": { "content": "## Layer 1 — Input / Trigger\nดึงร้าน Shopee Food → กรอง rating ≥ 4.5 → ingest\n\nLogic อยู่ใน backend แล้ว (เสถียร + retry + proxy/Apify)\nตั้งโหมดใน .env: SCRAPER_MODE=scraperapi|apify|direct\n(direct โดน Shopee บล็อก 403 — ต้องใช้ proxy/Apify)", "height": 280, "width": 430, "color": 4 },
+      "id": "note1",
+      "name": "L1 note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [ 220, 40 ]
+    },
+    {
+      "parameters": { "content": "## Layer 2–4 — Strategy · Create · Publish\nรันครบวงคำสั่งเดียว: Claude/Gemini เขียน A/B → ภาพ/วีดีโอ 9:16 + เสียงพากย์ → โพสต์ FB/IG/YouTube + วาง affiliate link คอมเมนต์แรก", "height": 280, "width": 350, "color": 3 },
+      "id": "note2",
+      "name": "L2-4 note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [ 690, 40 ]
+    },
+    {
+      "parameters": { "content": "## Layer 5 — Dashboard + Optimize\nเก็บ metric → A/B (ผู้ชนะต่อ platform) → ร้าน CTR ต่ำ 3 วันติด หยุดเอง", "height": 280, "width": 300, "color": 5 },
+      "id": "note3",
+      "name": "L5 note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [ 1080, 40 ]
+    },
+    {
+      "parameters": { "rule": { "interval": [ { "field": "hours", "hoursInterval": 6 } ] } },
+      "id": "sched",
+      "name": "ทุก 6 ชม.",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [ 280, 380 ]
+    },
+    {
+      "parameters": {},
+      "id": "manual",
+      "name": "รันเดี๋ยวนี้ (Manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [ 280, 560 ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8088/api/scrape",
+        "options": { "timeout": 120000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "scrape",
+      "name": "L1 · ดึงร้าน Shopee + ingest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 520, 400 ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8088/api/run-all",
+        "sendQuery": true,
+        "queryParameters": { "parameters": [ { "name": "limit", "value": "20" } ] },
+        "options": { "timeout": 600000 }
+      },
+      "id": "runall",
+      "name": "L2-4 · run-all (เขียน+สื่อ+โพสต์)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 820, 400 ]
+    },
+    {
+      "parameters": { "method": "POST", "url": "http://127.0.0.1:8088/api/auto-optimize" },
+      "id": "optimize",
+      "name": "L5 · auto-optimize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 1120, 400 ]
+    }
+  ],
+  "connections": {
+    "ทุก 6 ชม.": { "main": [ [ { "node": "L1 · ดึงร้าน Shopee + ingest", "type": "main", "index": 0 } ] ] },
+    "รันเดี๋ยวนี้ (Manual)": { "main": [ [ { "node": "L1 · ดึงร้าน Shopee + ingest", "type": "main", "index": 0 } ] ] },
+    "L1 · ดึงร้าน Shopee + ingest": { "main": [ [ { "node": "L2-4 · run-all (เขียน+สื่อ+โพสต์)", "type": "main", "index": 0 } ] ] },
+    "L2-4 · run-all (เขียน+สื่อ+โพสต์)": { "main": [ [ { "node": "L5 · auto-optimize", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

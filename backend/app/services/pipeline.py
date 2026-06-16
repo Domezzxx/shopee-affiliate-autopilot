@@ -1,8 +1,8 @@
-"""วงจรหลัก: ร้าน → Claude เขียน → Gemini ทำสื่อ → คิวโพสต์ A/B → ยิง → เก็บผล → auto-optimize."""
+"""วงจรหลัก: ร้าน → Claude เขียน → Gemini ทำสื่อ → คิวโพสต์ A/B → ยิง → วาง affiliate link คอมเมนต์แรก → เก็บผล → auto-optimize."""
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlmodel import select
 
@@ -13,7 +13,7 @@ from ..connectors import social
 
 
 def generate_for_store(store_id: int) -> dict:
-    """ขั้น 2+3: Claude เขียน + Gemini ทำสื่อ → สร้าง ContentJob + 6 Variant พร้อมสื่อ."""
+    """ขั้น 2+3: Claude เขียน + Gemini ทำสื่อ → สร้าง ContentJob + 6 Variant พร้อมสื่อ + คอมเมนต์แรก."""
     with get_session() as s:
         store = s.get(Store, store_id)
         if not store:
@@ -29,34 +29,41 @@ def generate_for_store(store_id: int) -> dict:
             store_id=store.id, status="media_ready",
             analysis_json=json.dumps(data["store_analysis"], ensure_ascii=False),
             schedule_json=json.dumps(data["posting_schedule"], ensure_ascii=False),
-            model_used=settings.content_model if settings.has_claude else "mock",
+            model_used=(settings.gemini_text_model if settings.content_provider == "gemini" and settings.has_gemini
+                        else settings.content_model if settings.content_provider == "claude" and settings.has_claude
+                        else "mock"),
             cost_baht=cost,
         )
         s.add(job); s.commit(); s.refresh(job)
 
         for v in data["variants"]:
-            mtype, mpath = media_gemini.make_media(v["image_prompt"], v["video_prompt"])
+            mtype, mpath, ipath = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"])
             s.add(Variant(
                 content_job_id=job.id, store_id=store.id, label=v["label"],
                 platform=v["platform"], hook=v["hook"], caption=v["caption"],
                 hashtags_json=json.dumps(v["hashtags"], ensure_ascii=False),
-                cta=v["cta"], voiceover_script=v["voiceover_script"],
+                cta=v["cta"], first_comment=v.get("first_comment", ""),
+                voiceover_script=v["voiceover_script"],
                 image_prompt=v["image_prompt"], video_prompt=v["video_prompt"],
-                media_type=mtype, media_path=mpath,
+                media_type=mtype, media_path=mpath, image_path=ipath,
             ))
         store.status = "active"
         s.add(store); s.commit()
         return {"content_job_id": job.id, "variants": 6, "cost_baht": cost}
 
 
+def _affiliate_link(store: Store) -> str:
+    return store.affiliate_link or store.shopee_url or "(ยังไม่ได้ใส่ลิงก์ affiliate)"
+
+
 def publish_job(content_job_id: int) -> dict:
-    """ขั้น 4: ยิงทุก variant ของ job ออก platform (Hybrid) + คิว affiliate link คอมเมนต์แรก."""
+    """ขั้น 4: ยิงทุก variant ออก platform (Hybrid) → วาง affiliate link เป็นคอมเมนต์แรกทันที."""
     posted = []
     with get_session() as s:
         variants = s.exec(select(Variant).where(Variant.content_job_id == content_job_id)).all()
         for v in variants:
-            caption = v.caption + "\n\n👇 ลิงก์สั่งในคอมเมนต์แรก"
-            res = social.publish(v.platform, caption, v.media_path)
+            store = s.get(Store, v.store_id)
+            res = social.publish(v.platform, v.caption, v.media_path)
             p = Post(
                 variant_id=v.id, store_id=v.store_id, platform=v.platform,
                 method=res["method"], account=res["account"],
@@ -64,7 +71,16 @@ def publish_job(content_job_id: int) -> dict:
                 status="posted" if res["ok"] else "failed",
                 error=res["error"], posted_at=datetime.utcnow() if res["ok"] else None,
             )
-            s.add(p); posted.append({"platform": v.platform, "label": v.label, **res})
+            # โพสต์สำเร็จ → วาง affiliate link เป็นคอมเมนต์แรก (แทน {LINK} ด้วยลิงก์จริง)
+            if res["ok"]:
+                link = _affiliate_link(store)
+                text = (v.first_comment or "สั่งเลย 👉 {LINK}").replace("{LINK}", link)
+                c = social.publish_comment(v.platform, res["method"], res["external_id"], text)
+                p.comment_id = c["comment_id"]
+                p.comment_status = "posted" if c["ok"] else "failed"
+            s.add(p)
+            posted.append({"platform": v.platform, "label": v.label,
+                           "comment": p.comment_status, **res})
         job = s.get(ContentJob, content_job_id)
         if job:
             job.status = "posted"; s.add(job)
