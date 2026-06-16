@@ -14,7 +14,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://backend:8088/api/run-all",
+        "url": "http://127.0.0.1:8088/api/run-all",
         "sendQuery": true,
         "queryParameters": { "parameters": [ { "name": "limit", "value": "20" } ] }
       },
@@ -27,7 +27,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://backend:8088/api/auto-optimize"
+        "url": "http://127.0.0.1:8088/api/auto-optimize"
       },
       "id": "optimize",
       "name": "Auto-optimize (หยุดร้าน CTR ต่ำ)",
