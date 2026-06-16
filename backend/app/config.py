@@ -47,9 +47,11 @@ class Settings(BaseSettings):
     scraper_ultra_premium: bool = False   # Shopee ต้องใช้ (แต่ต้องอัปแผน ScraperAPI แบบจ่ายเงิน)
     scraper_proxy: str = ""               # http://user:pass@host:port (โหมด direct)
     apify_token: str = ""
-    apify_actor: str = ""                 # เช่น "youruser/shopee-food-scraper"
-    shopee_keywords: str = "ร้านอาหารอร่อย อุดรธานี"   # คั่นหลายคำด้วย ;
-    scraper_limit: int = 50
+    apify_actor: str = "xtracto~shopee-search"   # actor บน Apify (ใช้ / หรือ ~ ก็ได้)
+    # input ที่ส่งให้ actor — แทน {KEYWORD} และ {LIMIT} อัตโนมัติ (default = xtracto/shopee-search)
+    apify_input: str = '{"country":"th","mode":"keyword","keyword":"{KEYWORD}","maxProducts":{LIMIT},"fetchDetail":false}'
+    shopee_keywords: str = "ก๋วยเตี๋ยว"   # คำค้น (คั่นหลายคำด้วย ;)
+    scraper_limit: int = 30
 
     # ระบบ
     posting_mode: str = "hybrid"          # hybrid | api | phone

@@ -54,7 +54,8 @@ def ingest(payload: IngestIn):
     added, skipped = 0, 0
     with get_session() as s:
         for st in payload.stores:
-            if st.rating < settings.shopee_min_rating or st.review_count < settings.shopee_min_reviews:
+            # review_count = 0 แปลว่า "ไม่ทราบจำนวนรีวิว" (เช่น search listing) → ไม่ตัดด้วยรีวิว
+            if st.rating < settings.shopee_min_rating or (st.review_count and st.review_count < settings.shopee_min_reviews):
                 skipped += 1
                 continue
             if s.exec(select(Store).where(Store.name == st.name, Store.area == st.area)).first():
