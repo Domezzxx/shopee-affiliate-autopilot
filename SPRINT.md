@@ -56,6 +56,13 @@
 - [x] แก้บั๊ก `setup_github.ps1` (`ErrorActionPreference=Continue`)
 - note: เป็น **สินค้า Shopee** (ไม่ใช่ร้าน Shopee Food เดลิเวอรี่ — ไม่มี actor) · เปลี่ยน `SHOPEE_KEYWORDS` ใน .env เลือก niche ได้
 
+## ✅ Sprint 2.7 — สมองวีดีโอระดับโลก (เสร็จล่าสุด)
+> แก้ปัญหา "คลิปน่าเบื่อ" → คอนเทนต์ครีเอเตอร์ระดับโลก
+- [x] **ซับไตเติลเด้งตามเสียง (TikTok-style)** — แยกพากย์ทีละบรรทัด (edge-tts) → วัดเวลาจริง (ffprobe) → สร้าง ASS ซิงค์ + แอนิเมชัน pop → burn เข้าวีดีโอ (ไทยไม่มี word-boundary เลยใช้วิธี per-phrase)
+- [x] **อัปเกรด prompt สคริปต์** — voiceover เป็น spoken-word (hook สะกิด → จุดขายเจาะจง → CTA), ภาพมีไอ/แสงสวย
+- [x] เอา hook box เดิมออกจาก montage (เหลือซับเด้งสะอาดๆ) + แก้ ffmpeg ass filter (cwd=media เลี่ยง C:)
+- [x] ทดสอบจริง: "เฮ้ย! ก๋วยเตี๋ยวเรือ 40 บาทจริงดิ?!" + ภาพก๋วยเตี๋ยวมีไอ + ซับขาวเด้ง ✅ (ดูเฟรมยืนยันแล้ว)
+
 ## 🔜 Sprint 3 — โพสต์จริง (Meta/YouTube API)
 - [ ] Meta App + permission (pages_manage_posts, instagram_content_publish) + App Review
 - [ ] FB Reels / IG Reels publish ผ่าน Graph API (รองรับวีดีโอ)

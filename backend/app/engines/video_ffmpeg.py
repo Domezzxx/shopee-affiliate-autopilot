@@ -52,9 +52,9 @@ def _esc(p: str) -> str:
     return p.replace("\\", "/").replace(":", "\\:")
 
 
-def _run(ff: str, args: list[str]) -> bool:
+def _run(ff: str, args: list[str], cwd: str | None = None) -> bool:
     try:
-        r = subprocess.run([ff, "-y", *args], capture_output=True, timeout=240)
+        r = subprocess.run([ff, "-y", *args], capture_output=True, timeout=240, cwd=cwd)
         if r.returncode != 0:
             print(f"[ffmpeg] rc={r.returncode}: {r.stderr.decode('utf-8','ignore')[-300:]}")
         return r.returncode == 0
@@ -138,28 +138,155 @@ def get_music(ff: str) -> str:
     return bed if (ok and os.path.exists(bed) and os.path.getsize(bed) > 1000) else ""
 
 
-def add_audio(ff: str, video: str, narration_text: str, out: str, voice: str | None = None) -> str | None:
-    """ใส่เสียงพากย์ (TTS) + เพลงคลอ ลงในวีดีโอ. ไม่มีเสียงเลย -> None."""
+def find_ffprobe() -> str:
+    p = shutil.which("ffprobe")
+    if p:
+        return p
+    base = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WinGet", "Packages")
+    hits = glob.glob(os.path.join(base, "Gyan.FFmpeg*", "**", "ffprobe.exe"), recursive=True)
+    return hits[0] if hits else ""
+
+
+def _duration(path: str) -> float:
+    fp = find_ffprobe()
+    if not fp or not os.path.exists(path):
+        return 0.0
+    try:
+        r = subprocess.run([fp, "-v", "error", "-show_entries", "format=duration",
+                            "-of", "csv=p=0", path], capture_output=True, text=True, timeout=30)
+        return float(r.stdout.strip())
+    except Exception:
+        return 0.0
+
+
+def _caption_lines(script: str, max_lines: int = 7, target: int = 20) -> list[str]:
+    """แตกสคริปต์เป็นบรรทัดซับสั้นๆ (TikTok-style ทีละวลี ~20 ตัวอักษร)."""
+    import re
+    text = re.sub(r"\s+", " ", (script or "").strip())
+    if not text:
+        return []
+    lines, cur = [], ""
+    for tok in text.split(" "):
+        if cur and len(cur) + 1 + len(tok) > target:
+            lines.append(cur); cur = tok
+        else:
+            cur = (cur + " " + tok).strip()
+        while len(cur) > target + 10:          # token ไทยยาวไม่มีช่องว่าง → ตัดแข็ง
+            lines.append(cur[:target]); cur = cur[target:]
+    if cur:
+        lines.append(cur)
+    lines = [l.strip() for l in lines if l.strip()]
+    if len(lines) > max_lines:
+        lines = lines[:max_lines - 1] + [" ".join(lines[max_lines - 1:])]
+    return lines[:max_lines]
+
+
+def _ass_t(sec: float) -> str:
+    cs = max(0, int(round(sec * 100)))
+    h, cs = divmod(cs, 360000)
+    m, cs = divmod(cs, 6000)
+    s, cs = divmod(cs, 100)
+    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
+
+
+def _build_ass(segs: list[tuple[str, float, float]]) -> str:
+    out = os.path.join(settings.media_dir, f"_cap_{uuid.uuid4().hex[:8]}.ass")
+    header = (
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 2\n\n"
+        "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, "
+        "BackColour, Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV\n"
+        "Style: Pop,Tahoma,88,&H00FFFFFF,&H00141414,&H96000000,1,1,6,3,2,60,60,560\n\n"
+        "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+    )
+    body = ""
+    for text, start, end in segs:
+        t = text.replace("\n", " ").replace("{", "(").replace("}", ")")
+        eff = r"{\fad(70,50)\fscx72\fscy72\t(0,140,\fscx107\fscy107)\t(140,230,\fscx100\fscy100)}"
+        body += f"Dialogue: 0,{_ass_t(start)},{_ass_t(end)},Pop,,0,0,0,,{eff}{t}\n"
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(header + body)
+    return out
+
+
+def build_voice_captions(ff: str, script: str, voice: str | None):
+    """แยกพากย์ทีละบรรทัด → วัดเวลาจริง → คืน (ไฟล์เสียงรวม, ไฟล์ซับ ASS ที่ซิงค์)."""
     from . import voice_tts
-    narr = voice_tts.synth(narration_text, voice) if narration_text else None
+    lines = _caption_lines(script)
+    if not lines:
+        return None, None
+    seg_files, segs, t = [], [], 0.0
+    for ln in lines:
+        mp3 = voice_tts.synth(ln, voice)
+        if not mp3:
+            continue
+        d = _duration(mp3)
+        if d <= 0.2:
+            d = max(1.0, len(ln) * 0.09)
+        seg_files.append(mp3)
+        segs.append((ln, t, t + d))
+        t += d
+    if not seg_files:
+        return None, None
+    narration = os.path.join(settings.media_dir, f"narr_{uuid.uuid4().hex[:8]}.mp3")
+    if len(seg_files) == 1:
+        shutil.copyfile(seg_files[0], narration)
+    else:
+        lst = os.path.join(settings.media_dir, f"_al_{uuid.uuid4().hex[:6]}.txt")
+        with open(lst, "w", encoding="utf-8") as f:
+            for s in seg_files:
+                f.write(f"file '{s.replace(os.sep, '/')}'\n")
+        ok = _run(ff, ["-f", "concat", "-safe", "0", "-i", lst, "-c:a", "libmp3lame", "-q:a", "4", narration])
+        if os.path.exists(lst):
+            os.remove(lst)
+        if not (ok and os.path.exists(narration)):
+            narration = seg_files[0]
+    ass = _build_ass(segs)
+    for s in seg_files:
+        if s != narration and os.path.exists(s):
+            os.remove(s)
+    return narration, ass
+
+
+def add_audio(ff: str, video: str, narration_text: str, out: str, voice: str | None = None) -> str | None:
+    """ใส่เสียงพากย์ (ทีละบรรทัด) + ซับเด้งตามเสียง + เพลงคลอ ลงในวีดีโอ."""
+    narr, ass = (None, None)
+    if narration_text:
+        narr, ass = build_voice_captions(ff, narration_text, voice)
     music = get_music(ff) if settings.enable_music else ""
     v = settings.music_volume
-    tail = ["-movflags", "+faststart", "-shortest", out]
-    if narr and music:
-        args = ["-i", video, "-i", narr, "-stream_loop", "-1", "-i", music,
-                "-filter_complex",
-                f"[2:a]volume={v}[m];[1:a][m]amix=inputs=2:duration=first:dropout_transition=0[a]",
-                "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", *tail]
-    elif narr:
-        args = ["-i", video, "-i", narr, "-map", "0:v", "-map", "1:a",
-                "-c:v", "copy", "-c:a", "aac", *tail]
-    elif music:
-        args = ["-stream_loop", "-1", "-i", music, "-i", video,
-                "-filter_complex", f"[0:a]volume={v}[a]",
-                "-map", "1:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", *tail]
-    else:
+    if not narr and not music:
         return None
-    return out if (_run(ff, args) and os.path.exists(out) and os.path.getsize(out) > 1000) else None
+
+    fc, vlabel = [], "0:v"
+    if ass:
+        # อ้างชื่อไฟล์ล้วน + รัน ffmpeg ใน cwd=media (เลี่ยง C: ใน filter path)
+        fc.append(f"[0:v]ass={os.path.basename(ass)}[v]")
+        vlabel = "[v]"
+    inputs = ["-i", video]
+    if narr:
+        inputs += ["-i", narr]
+    if music:
+        inputs += ["-stream_loop", "-1", "-i", music]
+    if narr and music:
+        fc.append(f"[2:a]volume={v}[m];[1:a][m]amix=inputs=2:duration=first:dropout_transition=0[a]")
+        amap = "[a]"
+    elif narr:
+        amap = "1:a"
+    else:
+        fc.append(f"[1:a]volume={v}[a]")
+        amap = "[a]"
+
+    args = [*inputs]
+    if fc:
+        args += ["-filter_complex", ";".join(fc)]
+    args += ["-map", vlabel, "-map", amap]
+    args += (["-c:v", "libx264", "-pix_fmt", "yuv420p"] if ass else ["-c:v", "copy"])
+    args += ["-c:a", "aac", "-movflags", "+faststart", "-shortest", out]
+    ok = _run(ff, args, cwd=settings.media_dir)
+    for tmp in (ass, narr):
+        if tmp and os.path.exists(tmp):
+            os.remove(tmp)
+    return out if (ok and os.path.exists(out) and os.path.getsize(out) > 1000) else None
 
 
 def build_reel(scenes: list[tuple[str, str]], seconds_each: int = 4,
@@ -170,7 +297,8 @@ def build_reel(scenes: list[tuple[str, str]], seconds_each: int = 4,
         return None
     clips = []
     for i, (img, txt) in enumerate(scenes):
-        c = _scene_clip(ff, img, txt, seconds_each, i)
+        # montage: ไม่ใส่ hook ซ้อนในฉาก — ใช้ซับเด้งตามเสียง (ASS) อย่างเดียว
+        c = _scene_clip(ff, img, "", seconds_each, i)
         if c:
             clips.append(c)
     if not clips:
