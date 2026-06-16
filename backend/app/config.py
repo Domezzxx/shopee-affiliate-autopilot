@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     meta_page_id: str = ""
     meta_ig_user_id: str = ""
     meta_access_token: str = ""
+    public_base_url: str = ""        # สำหรับ IG (ต้องโฮสต์สื่อ public เช่น ngrok/cloud)
+    enable_post_delay: bool = False  # โพสต์จริง: สุ่มหน่วงเวลาระหว่างโพสต์ (กัน spam)
 
     # YouTube
     youtube_client_id: str = ""

@@ -63,11 +63,14 @@
 - [x] เอา hook box เดิมออกจาก montage (เหลือซับเด้งสะอาดๆ) + แก้ ffmpeg ass filter (cwd=media เลี่ยง C:)
 - [x] ทดสอบจริง: "เฮ้ย! ก๋วยเตี๋ยวเรือ 40 บาทจริงดิ?!" + ภาพก๋วยเตี๋ยวมีไอ + ซับขาวเด้ง ✅ (ดูเฟรมยืนยันแล้ว)
 
-## 🔜 Sprint 3 — โพสต์จริง (Meta/YouTube API)
-- [ ] Meta App + permission (pages_manage_posts, instagram_content_publish) + App Review
-- [ ] FB Reels / IG Reels publish ผ่าน Graph API (รองรับวีดีโอ)
-- [ ] YouTube OAuth refresh flow + resumable upload (Shorts)
-- [ ] random delay 15–45 นาที + กระจายเวลาโพสต์ตามตาราง Claude
+## 🟡 Sprint 3 — โพสต์จริง (โค้ดเสร็จแล้ว — รอ credential + App Review)
+- [x] **FB Page โพสต์จริง** — อัปโหลดไฟล์ตรง multipart (วีดีโอ→/videos, ภาพ→/photos) ไม่ต้อง public URL
+- [x] **IG Reels** — container (media_type=REELS) + poll + media_publish · ⚠️ ต้องตั้ง `PUBLIC_BASE_URL`
+- [x] **YouTube Shorts** — OAuth refresh → resumable upload (videos.insert) + #Shorts
+- [x] **random delay** ระหว่างโพสต์ (`ENABLE_POST_DELAY`) สุ่ม 15-45 นาที กัน spam
+- [ ] รอ user: Meta App + permission (pages_manage_posts, instagram_content_publish) + **App Review**
+- [ ] รอ user: YouTube OAuth (client_id/secret + refresh_token)
+- [ ] รอ user: **PUBLIC_BASE_URL** สำหรับ IG (โฮสต์ /media ให้ public เช่น ngrok/cloudflared)
 
 ## 🔜 Sprint 4 — Phone Farm จริง (6 เครื่อง)
 - [ ] ผูก uiautomator2 / Appium ต่อแอป (FB/IG/YouTube) — แตะปุ่ม+พิมพ์แคปชั่นจริง
