@@ -63,21 +63,25 @@ def _run(ff: str, args: list[str], cwd: str | None = None) -> bool:
         return False
 
 
-def _scene_clip(ff: str, image_path: str, text: str, seconds: int, motion: int) -> str | None:
-    """ภาพ 1 ใบ -> คลิป 1 ฉาก (ทิศทางกล้องต่างกันตาม motion)."""
+def _scene_clip(ff: str, image_path: str, text: str, seconds: float, motion: int,
+                punch: bool = False) -> str | None:
+    """ภาพ 1 ใบ -> คลิป 1 ฉาก (ทิศทางกล้องต่างกันตาม motion). punch = ซูมแรง ใช้กับช็อตตัดเร็ว."""
     if not os.path.exists(image_path):
         return None
-    frames = seconds * 30
+    frames = int(seconds * 30)
     out = os.path.join(settings.media_dir, f"_seg_{uuid.uuid4().hex[:8]}.mp4")
     base = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
-    if motion % 3 == 0:        # ซูมเข้ากลางภาพ
-        zp = (f"zoompan=z='min(zoom+0.0013,1.28)':d={frames}:"
+    zi = 0.0048 if punch else 0.0013      # ความเร็วซูมเข้า
+    pi = 0.0024 if punch else 0.0008      # ความเร็วซูมตอน pan
+    zc = 1.45 if punch else 1.28          # เพดานซูม
+    if motion % 3 == 0:        # ซูมเข้ากลางภาพ (punch)
+        zp = (f"zoompan=z='min(zoom+{zi},{zc})':d={frames}:"
               f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30")
-    elif motion % 3 == 1:      # เลื่อนซ้าย->ขวา
-        zp = (f"zoompan=z='min(zoom+0.0008,1.18)':d={frames}:"
+    elif motion % 3 == 1:      # เลื่อนซ้าย->ขวา + ซูม
+        zp = (f"zoompan=z='min(zoom+{pi},1.3)':d={frames}:"
               f"x='(iw-iw/zoom)*on/{frames}':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30")
-    else:                      # เลื่อนบน->ล่าง
-        zp = (f"zoompan=z='min(zoom+0.0008,1.18)':d={frames}:"
+    else:                      # เลื่อนบน->ล่าง + ซูม
+        zp = (f"zoompan=z='min(zoom+{pi},1.3)':d={frames}:"
               f"x='iw/2-(iw/zoom/2)':y='(ih-ih/zoom)*on/{frames}':s=1080x1920:fps=30")
     vf = f"{base},{zp}"
     tmp = None
@@ -102,6 +106,32 @@ def _scene_clip(ff: str, image_path: str, text: str, seconds: int, motion: int) 
         if ok and os.path.exists(out) and os.path.getsize(out) > 1000:
             return out
     return None
+
+
+def _cta_clip(ff: str, image_path: str, lines: list[str], seconds: float) -> str | None:
+    """ฉากปิด — ภาพมืดลง + ข้อความ CTA ใหญ่กลางจอ (ชื่อร้าน + สั่งเลย + ลิงก์คอมเมนต์)."""
+    if not os.path.exists(image_path) or not lines:
+        return None
+    frames = int(seconds * 30)
+    out = os.path.join(settings.media_dir, f"_cta_{uuid.uuid4().hex[:8]}.mp4")
+    base = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1"
+    vf = (f"{base},eq=brightness=-0.30:saturation=0.85,"
+          f"zoompan=z='min(zoom+0.0016,1.2)':d={frames}:"
+          f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps=30")
+    font = _font()
+    tmp = None
+    if font:
+        tmp = os.path.join(settings.media_dir, f"_t_{uuid.uuid4().hex[:6]}.txt")
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+        vf += (f",drawtext=fontfile='{_esc(font)}':textfile='{_esc(tmp)}':fontcolor=white:"
+               "fontsize=70:line_spacing=26:borderw=4:bordercolor=black:"
+               "x=(w-text_w)/2:y=(h-text_h)/2")
+    ok = _run(ff, ["-loop", "1", "-i", image_path, "-t", str(seconds), "-r", "30",
+                   "-vf", vf, "-c:v", "libx264", "-pix_fmt", "yuv420p", out])
+    if tmp and os.path.exists(tmp):
+        os.remove(tmp)
+    return out if (ok and os.path.exists(out) and os.path.getsize(out) > 1000) else None
 
 
 def image_to_reel(image_path: str, text: str = "") -> str | None:
@@ -268,7 +298,8 @@ def add_audio(ff: str, video: str, narration_text: str, out: str, voice: str | N
     if music:
         inputs += ["-stream_loop", "-1", "-i", music]
     if narr and music:
-        fc.append(f"[2:a]volume={v}[m];[1:a][m]amix=inputs=2:duration=first:dropout_transition=0[a]")
+        # duration=longest + เพลง loop → -shortest ตัดที่ความยาววีดีโอ (CTA ท้ายไม่หาย) เพลงคลอตลอด
+        fc.append(f"[2:a]volume={v}[m];[1:a][m]amix=inputs=2:duration=longest:dropout_transition=0[a]")
         amap = "[a]"
     elif narr:
         amap = "1:a"
@@ -289,18 +320,29 @@ def add_audio(ff: str, video: str, narration_text: str, out: str, voice: str | N
     return out if (ok and os.path.exists(out) and os.path.getsize(out) > 1000) else None
 
 
-def build_reel(scenes: list[tuple[str, str]], seconds_each: int = 4,
-               transition: float = 0.6, narration: str = "", voice: str | None = None) -> str | None:
-    """หลายภาพ (image_path, text) -> คลิปเดียวต่อเนื่อง หลายฉาก + ครอสเฟด + เสียงพากย์ + เพลง."""
+def build_reel(scenes: list[tuple[str, str]], seconds_each: float | None = None,
+               transition: float = 0.3, narration: str = "", voice: str | None = None,
+               cta_lines: list[str] | None = None) -> str | None:
+    """หลายภาพ -> คลิปตัดเร็วมีจังหวะ (zoom punch + hard cut) + ฉากปิด CTA + ซับเด้ง + เสียง + เพลง."""
     ff = find_ffmpeg()
     if not ff or not scenes:
         return None
+    sec = seconds_each or settings.reel_scene_seconds
+    imgs = [img for img, _ in scenes if img and os.path.exists(img)]
+    if not imgs:
+        return None
+    # ตัดเร็ว: วนภาพให้ได้ ~5-8 ช็อต zoom punch
+    n = min(8, max(5, len(imgs) + 2))
     clips = []
-    for i, (img, txt) in enumerate(scenes):
-        # montage: ไม่ใส่ hook ซ้อนในฉาก — ใช้ซับเด้งตามเสียง (ASS) อย่างเดียว
-        c = _scene_clip(ff, img, "", seconds_each, i)
+    for i in range(n):
+        c = _scene_clip(ff, imgs[i % len(imgs)], "", sec, i, punch=True)
         if c:
             clips.append(c)
+    # ฉากปิด CTA (ใช้ภาพแรก)
+    if cta_lines:
+        cta = _cta_clip(ff, imgs[0], cta_lines, settings.reel_cta_seconds)
+        if cta:
+            clips.append(cta)
     if not clips:
         return None
 
@@ -308,27 +350,17 @@ def build_reel(scenes: list[tuple[str, str]], seconds_each: int = 4,
     if len(clips) == 1:
         shutil.move(clips[0], silent)
     else:
-        # ครอสเฟดต่อกัน: offset ของรอยต่อที่ k = k*(L - T)
-        L, T = seconds_each, transition
-        inputs: list[str] = []
-        for c in clips:
-            inputs += ["-i", c]
-        chains, cur = [], "0:v"
-        for k in range(1, len(clips)):
-            off = round(k * (L - T), 3)
-            lbl = "vout" if k == len(clips) - 1 else f"v{k}"
-            chains.append(f"[{cur}][{k}:v]xfade=transition=fade:duration={T}:offset={off}[{lbl}]")
-            cur = lbl
-        ok = _run(ff, [*inputs, "-filter_complex", ";".join(chains), "-map", "[vout]",
-                       "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", silent])
-        if not ok:
-            lst = os.path.join(settings.media_dir, f"_list_{uuid.uuid4().hex[:6]}.txt")
-            with open(lst, "w", encoding="utf-8") as f:
-                for c in clips:
-                    f.write(f"file '{c.replace(os.sep, '/')}'\n")
-            ok = _run(ff, ["-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", silent])
-            if os.path.exists(lst):
-                os.remove(lst)
+        # ตัดตรง (hard cut) = จังหวะเร็ว
+        lst = os.path.join(settings.media_dir, f"_list_{uuid.uuid4().hex[:6]}.txt")
+        with open(lst, "w", encoding="utf-8") as f:
+            for c in clips:
+                f.write(f"file '{c.replace(os.sep, '/')}'\n")
+        ok = _run(ff, ["-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", silent])
+        if not (ok and os.path.exists(silent) and os.path.getsize(silent) > 1000):
+            ok = _run(ff, ["-f", "concat", "-safe", "0", "-i", lst,
+                           "-c:v", "libx264", "-pix_fmt", "yuv420p", silent])  # fallback re-encode
+        if os.path.exists(lst):
+            os.remove(lst)
         for c in clips:
             if os.path.exists(c):
                 os.remove(c)

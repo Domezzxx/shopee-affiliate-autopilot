@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     video_mode: str = "image"
     video_seconds: int = 6
     ffmpeg_path: str = ""            # เว้นว่าง = หาให้อัตโนมัติ
+    reel_scene_seconds: float = 2.0  # ความยาวต่อช็อตในคลิปรวม (สั้น = ตัดเร็วมีจังหวะ)
+    reel_cta_seconds: float = 2.6    # ฉากปิด CTA
 
     # Audio — เสียงพากย์ไทย (edge-tts ฟรี) + เพลงประกอบ
     enable_voiceover: bool = True

@@ -217,7 +217,9 @@ def make_reel(store_id: int, label: str = "A", voice: str = "female"):
                 narration.append(v.voiceover_script or v.hook)
         if not scenes:
             raise HTTPException(400, "ไม่มีภาพต้นฉบับ — รันร้านนี้ใหม่ก่อน (โหมด ffmpeg จะเก็บภาพไว้)")
-        reel = video_ffmpeg.build_reel(scenes, narration=" ".join(narration), voice=voice_name)
+        cta_lines = [store.name[:24], "สั่งเลยตอนนี้!", "ลิงก์ในคอมเมนต์แรก"]
+        reel = video_ffmpeg.build_reel(scenes, narration=" ".join(narration),
+                                       voice=voice_name, cta_lines=cta_lines)
         if not reel:
             raise HTTPException(500, "สร้างคลิปไม่สำเร็จ")
         store.reel_url = "/media/" + os.path.basename(reel)
