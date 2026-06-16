@@ -22,6 +22,16 @@ def _is_video(path: str) -> bool:
     return path.lower().endswith((".mp4", ".mov", ".m4v"))
 
 
+def _err(j: dict) -> str:
+    """ดึงข้อความ error จาก Graph API response ให้อ่านรู้เรื่อง."""
+    e = (j or {}).get("error", {})
+    if isinstance(e, dict):
+        msg = e.get("message") or e.get("error_user_msg") or ""
+        code = e.get("code", "")
+        return f"[{code}] {msg}".strip() if (msg or code) else str(j)[:200]
+    return str(j)[:200]
+
+
 # ----------------------------------------------------------- Official API: POST
 def _post_facebook(caption: str, media_path: str) -> dict:
     """โพสต์ลง Facebook Page — อัปโหลดไฟล์ตรง (multipart) ไม่ต้องมี public URL."""
@@ -61,7 +71,7 @@ def _post_instagram(caption: str, media_path: str) -> dict:
     url = _public_media_url(media_path)
     if not url:
         return {"ok": False, "method": "api", "account": "ig", "external_id": "",
-                "error": "IG ต้องตั้ง PUBLIC_BASE_URL (โฮสต์สื่อ public เช่น ngrok/cloud)"}
+                "error": "IG ต้องตั้ง PUBLIC_BASE_URL (โฮสต์สื่อ public เช่น ngrok/cloudflared)"}
     try:
         tok = settings.meta_access_token
         is_vid = _is_video(media_path)
@@ -71,18 +81,34 @@ def _post_instagram(caption: str, media_path: str) -> dict:
         else:
             data["image_url"] = url
         with httpx.Client(timeout=180) as c:
-            cid = c.post(f"{GRAPH}/{settings.meta_ig_user_id}/media", data=data).json()["id"]
+            cj = c.post(f"{GRAPH}/{settings.meta_ig_user_id}/media", data=data).json()
+            if "id" not in cj:  # API ตอบ error → บอกสาเหตุชัดๆ ไม่ใช่ KeyError
+                return {"ok": False, "method": "api", "account": "ig", "external_id": "",
+                        "error": "สร้าง IG container ไม่ได้: " + _err(cj)}
+            cid = cj["id"]
             if is_vid:  # วีดีโอต้องรอประมวลผลก่อน publish
-                for _ in range(20):
+                ready = False
+                for _ in range(30):
                     st = c.get(f"{GRAPH}/{cid}",
                                params={"fields": "status_code", "access_token": tok}).json()
-                    if st.get("status_code") == "FINISHED":
+                    code = st.get("status_code")
+                    if code == "FINISHED":
+                        ready = True
                         break
+                    if code == "ERROR":
+                        return {"ok": False, "method": "api", "account": "ig",
+                                "external_id": "", "error": "IG ประมวลผลวีดีโอล้มเหลว (ERROR)"}
                     time.sleep(3)
+                if not ready:
+                    return {"ok": False, "method": "api", "account": "ig", "external_id": "",
+                            "error": "IG ประมวลผลวีดีโอนานเกิน (timeout)"}
             pub = c.post(f"{GRAPH}/{settings.meta_ig_user_id}/media_publish",
                          data={"creation_id": cid, "access_token": tok}).json()
+        if "id" not in pub:
+            return {"ok": False, "method": "api", "account": "ig", "external_id": "",
+                    "error": "publish IG ไม่ได้: " + _err(pub)}
         return {"ok": True, "method": "api", "account": settings.meta_ig_user_id,
-                "external_id": str(pub.get("id", "")), "error": ""}
+                "external_id": str(pub["id"]), "error": ""}
     except Exception as e:
         return {"ok": False, "method": "api", "account": "ig",
                 "external_id": "", "error": str(e)[:300]}
@@ -133,6 +159,73 @@ def _post_youtube(caption: str, media_path: str) -> dict:
 
 
 _API = {"facebook": _post_facebook, "instagram": _post_instagram, "youtube": _post_youtube}
+
+
+# ----------------------------------------------------------- preflight (เช็คความพร้อมก่อนโพสต์จริง)
+def _verify_facebook() -> dict:
+    """ยิง Graph API จริงเพื่อยืนยันว่า Page token ใช้ได้ + อ่านชื่อเพจได้."""
+    if not settings.has_meta:
+        return {"ready": False, "live": False, "detail": "ยังไม่ตั้ง META_PAGE_ID + META_ACCESS_TOKEN (โหมด mock)"}
+    try:
+        with httpx.Client(timeout=30) as c:
+            j = c.get(f"{GRAPH}/{settings.meta_page_id}",
+                      params={"fields": "name,id", "access_token": settings.meta_access_token}).json()
+        if "name" in j:
+            return {"ready": True, "live": True, "detail": f"พร้อมโพสต์เพจ: {j['name']}"}
+        return {"ready": False, "live": False, "detail": "token/เพจใช้ไม่ได้: " + _err(j)}
+    except Exception as e:
+        return {"ready": False, "live": False, "detail": f"เชื่อม Graph API ไม่ได้: {str(e)[:160]}"}
+
+
+def _verify_instagram() -> dict:
+    if not settings.has_meta or not settings.meta_ig_user_id:
+        return {"ready": False, "live": False, "detail": "ยังไม่ตั้ง META_IG_USER_ID + META_ACCESS_TOKEN (โหมด mock)"}
+    detail = []
+    ok = True
+    try:
+        with httpx.Client(timeout=30) as c:
+            j = c.get(f"{GRAPH}/{settings.meta_ig_user_id}",
+                      params={"fields": "username", "access_token": settings.meta_access_token}).json()
+        if "username" in j:
+            detail.append(f"บัญชี IG: @{j['username']}")
+        else:
+            ok = False
+            detail.append("IG user/token ใช้ไม่ได้: " + _err(j))
+    except Exception as e:
+        ok = False
+        detail.append(f"เชื่อม Graph API ไม่ได้: {str(e)[:120]}")
+    if not settings.public_base_url:
+        ok = False
+        detail.append("ขาด PUBLIC_BASE_URL (IG รับเฉพาะ public URL ของสื่อ)")
+    else:
+        detail.append(f"public URL: {settings.public_base_url}")
+    return {"ready": ok, "live": ok, "detail": " · ".join(detail)}
+
+
+def _verify_youtube() -> dict:
+    if not (settings.youtube_refresh_token and settings.youtube_client_id):
+        return {"ready": False, "live": False, "detail": "ยังไม่ตั้ง YOUTUBE_CLIENT_ID/SECRET/REFRESH_TOKEN (โหมด mock)"}
+    try:
+        _yt_access_token()
+        return {"ready": True, "live": True, "detail": "OAuth refresh token ใช้ได้ พร้อมอัปโหลด Shorts"}
+    except Exception as e:
+        return {"ready": False, "live": False, "detail": f"refresh token ใช้ไม่ได้: {str(e)[:160]}"}
+
+
+def preflight() -> dict:
+    """ตรวจความพร้อมโพสต์จริงต่อ platform — ยิง API จริงเพื่อยืนยัน token/สิทธิ์."""
+    fb = _verify_facebook()
+    ig = _verify_instagram()
+    yt = _verify_youtube()
+    any_live = any(x["live"] for x in (fb, ig, yt))
+    return {
+        "facebook": fb, "instagram": ig, "youtube": yt,
+        "posting_mode": settings.posting_mode,
+        "post_delay": settings.enable_post_delay,
+        "any_live": any_live,
+        "summary": ("พร้อมโพสต์จริงบางช่องทางแล้ว" if any_live
+                    else "ยังเป็นโหมด mock ทั้งหมด — ใส่ credential ใน .env เพื่อโพสต์จริง"),
+    }
 
 
 # ----------------------------------------------------------- Official API: COMMENT

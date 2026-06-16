@@ -15,6 +15,10 @@ venv/
 # n8n local state
 n8n/.n8n/
 
+# cloudflared (binary โหลดเอง + log) สำหรับ public URL ของ IG
+scripts/cloudflared.exe
+scripts/*.log
+
 # editor / os
 .idea/
 .vscode/

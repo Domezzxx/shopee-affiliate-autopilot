@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from .config import settings
+from .connectors import social
 from .db import ContentJob, Metric, Post, Store, Variant, get_session, jloads
 from .services import pipeline
 
@@ -287,6 +288,13 @@ def abtest(store_id: int):
 @router.post("/auto-optimize")
 def run_optimize():
     return pipeline.auto_optimize()
+
+
+# ----------------------------------------------------------------- preflight (Sprint 3)
+@router.get("/post/preflight")
+def post_preflight():
+    """เช็คความพร้อมโพสต์จริงต่อ platform (ยิง API จริงยืนยัน token/สิทธิ์) — ก่อน go-live."""
+    return social.preflight()
 
 
 # ----------------------------------------------------------------- keys / status

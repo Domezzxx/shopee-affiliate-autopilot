@@ -63,14 +63,18 @@
 - [x] เอา hook box เดิมออกจาก montage (เหลือซับเด้งสะอาดๆ) + แก้ ffmpeg ass filter (cwd=media เลี่ยง C:)
 - [x] ทดสอบจริง: "เฮ้ย! ก๋วยเตี๋ยวเรือ 40 บาทจริงดิ?!" + ภาพก๋วยเตี๋ยวมีไอ + ซับขาวเด้ง ✅ (ดูเฟรมยืนยันแล้ว)
 
-## 🟡 Sprint 3 — โพสต์จริง (โค้ดเสร็จแล้ว — รอ credential + App Review)
+## 🟢 Sprint 3 — โพสต์จริง (โค้ด+เครื่องมือพร้อม เหลือ user ใส่ credential)
 - [x] **FB Page โพสต์จริง** — อัปโหลดไฟล์ตรง multipart (วีดีโอ→/videos, ภาพ→/photos) ไม่ต้อง public URL
-- [x] **IG Reels** — container (media_type=REELS) + poll + media_publish · ⚠️ ต้องตั้ง `PUBLIC_BASE_URL`
+- [x] **IG Reels** — container (media_type=REELS) + poll status (FINISHED/ERROR/timeout) + media_publish
 - [x] **YouTube Shorts** — OAuth refresh → resumable upload (videos.insert) + #Shorts
 - [x] **random delay** ระหว่างโพสต์ (`ENABLE_POST_DELAY`) สุ่ม 15-45 นาที กัน spam
-- [ ] รอ user: Meta App + permission (pages_manage_posts, instagram_content_publish) + **App Review**
-- [ ] รอ user: YouTube OAuth (client_id/secret + refresh_token)
-- [ ] รอ user: **PUBLIC_BASE_URL** สำหรับ IG (โฮสต์ /media ให้ public เช่น ngrok/cloudflared)
+- [x] **error handling แน่นขึ้น** — `_err()` ดึงข้อความ Graph API จริง (ไม่ KeyError) + IG บอกสถานะ container ชัด
+- [x] **Preflight** — `GET /api/post/preflight` ยิง API จริงเช็คความพร้อมต่อ platform + ปุ่ม **🚦 เช็คพร้อมโพสต์** บน dashboard
+- [x] **public URL ฟรีสำหรับ IG** — `scripts/start_tunnel.ps1` (cloudflared quick tunnel, http2, เขียน PUBLIC_BASE_URL ลง .env เอง) — **ทดสอบจริงแล้ว /media เข้าถึง public ได้ HTTP 200**
+- [x] **YouTube OAuth helper** — `scripts/youtube_oauth.py` (loopback flow ขอ refresh_token + เขียน .env)
+- [x] **เช็คลิสต์ go-live** — `SETUP_SPRINT3.md` (ทำเอง FB/IG/YouTube ทีละขั้น)
+- [ ] รอ user: Meta App + permission (pages_manage_posts, instagram_content_publish) + **App Review** (โปรดักชัน)
+- [ ] รอ user: รัน `scripts/youtube_oauth.py` (มี Google Cloud OAuth Desktop client)
 
 ## 🔜 Sprint 4 — Phone Farm จริง (6 เครื่อง)
 - [ ] ผูก uiautomator2 / Appium ต่อแอป (FB/IG/YouTube) — แตะปุ่ม+พิมพ์แคปชั่นจริง
