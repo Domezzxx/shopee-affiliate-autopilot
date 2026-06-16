@@ -4,7 +4,8 @@
 #     cd C:\Users\PronHub\affiliate-autopilot
 #     .\setup_github.ps1
 # ============================================================
-$ErrorActionPreference = "Stop"
+# Continue (ไม่ใช่ Stop) — เพราะ gh/git เขียน stderr ปกติ (เช่น repo ยังไม่มี) จะได้ไม่หยุดกลางคัน
+$ErrorActionPreference = "Continue"
 $repo = "shopee-affiliate-autopilot"
 $visibility = "--private"
 
