@@ -137,6 +137,110 @@ def _extract_audio(video: str) -> str | None:
     return wav if (ok and os.path.exists(wav)) else None
 
 
+def chef_path() -> str:
+    return os.path.join(settings.data_dir, "persona", "chef.png")
+
+
+def build_restaurant_reel(media_items: list[str], narration: str, voice: str | None = None,
+                          chef_face: str | None = None, cta_lines: list[str] | None = None,
+                          progress_cb=None) -> str | None:
+    """รีวิวในร้าน: พ่อครัวพูดเต็มจอเปิด → แอคชั่น (footage) + พ่อครัว PiP วงกลม → ปิด + ASMR.
+
+    media_items = footage วีดีโอ (Flow video / stock) + ภาพ. คืน path reel หรือ None.
+    """
+    import uuid as _uuid
+    from . import stock_sfx
+    ff = vf.find_ffmpeg()
+    chef = chef_face or chef_path()
+    items = [p for p in (media_items or []) if p and os.path.exists(p)]
+    if not ff or not os.path.exists(chef) or not narration or not items:
+        return None
+
+    M = settings.media_dir
+    def _tmp(ext): return os.path.join(M, f"_rest_{_uuid.uuid4().hex[:8]}.{ext}")
+    def _cb(step, pct):
+        if progress_cb:
+            try: progress_cb(step, pct)
+            except Exception: pass
+    tmps, narr, ass = [], None, None
+
+    try:
+        # 1) เสียงพ่อครัว + ซับ → 2) พ่อครัวพูด (Wav2Lip)
+        _cb("🎙️ เสียงพ่อครัว + ซับ", 12)
+        narr, ass = vf.build_voice_captions(ff, narration, voice)
+        if not narr:
+            return None
+        tmps += [narr, ass]   # _mux_audio จะลบให้เอง (exists-check กันซ้ำ)
+        V = vf._duration(narr) or 12.0
+        _cb("🧑‍🍳 พ่อครัวพูด (lip-sync)", 30)
+        chef_talk = synthesize(narr, face=chef)
+        if not chef_talk:
+            return None
+        tmps.append(chef_talk)
+
+        # 3) พ่อครัวเต็มจอ (เบลอ-ฟิล 9:16) → ตัด intro + ส่วน PiP
+        _cb("🎬 ฉากเปิดพ่อครัว", 45)
+        chef_full = _tmp("mp4"); tmps.append(chef_full)
+        vf._run(ff, ["-i", chef_talk, "-filter_complex",
+            "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=24[bg];"
+            "[0:v]scale=1080:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,fps=30[v]",
+            "-map", "[v]", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", chef_full])
+        T = round(min(4.5, V * 0.32), 2)
+        chef_intro = _tmp("mp4"); tmps.append(chef_intro)
+        vf._run(ff, ["-i", chef_full, "-t", f"{T}", "-c:v", "libx264", "-pix_fmt", "yuv420p", chef_intro])
+        chef_pip = _tmp("mp4"); tmps.append(chef_pip)
+        vf._run(ff, ["-ss", f"{T}", "-i", chef_talk, "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", chef_pip])
+
+        # 4) B-roll แอคชั่น (วีดีโอจริง/ภาพ) ยาว ~ V-T
+        _cb("🍜 ฉากแอคชั่นในร้าน", 60)
+        need, beat = V - T, [0.9, 1.3, 1.0, 1.2]
+        clips, durs, i, acc = [], [], 0, 0.0
+        while acc < need and i < 14:
+            src = items[i % len(items)]
+            si = round(2.0 * beat[i % 4], 2)
+            c = (vf._video_clip(ff, src, max(1.4, si), i) if vf._is_video_file(src)
+                 else vf._scene_clip(ff, src, "", si, i, punch=True))
+            if c:
+                d = vf._duration(c) or si
+                clips.append(c); durs.append(d)
+                acc += d if len(clips) == 1 else (d - 0.22)
+            i += 1
+        if not clips:
+            return None
+        broll = _tmp("mp4"); tmps.append(broll)
+        if len(clips) == 1:
+            import shutil; shutil.copy(clips[0], broll)
+        else:
+            vf._concat_xfade(ff, clips, durs, broll) or vf._concat_hardcut(ff, clips, broll)
+        for c in clips:
+            if os.path.exists(c): os.remove(c)
+
+        # 5) ซ้อนพ่อครัว PiP วงกลม + ต่อ intro + แอคชั่น
+        _cb("🎞️ ซ้อนพ่อครัว PiP + ต่อคลิป", 75)
+        broll_pip = overlay_pip(broll, chef_pip, width=300, corner="tr", keep_audio=False)
+        if not broll_pip:
+            return None
+        tmps.append(broll_pip)
+        visual = _tmp("mp4"); lst = _tmp("txt"); tmps += [visual, lst]
+        with open(lst, "w", encoding="utf-8") as f:
+            f.write(f"file '{chef_intro.replace(os.sep, '/')}'\n")
+            f.write(f"file '{broll_pip.replace(os.sep, '/')}'\n")
+        vf._run(ff, ["-f", "concat", "-safe", "0", "-i", lst,
+                     "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", visual])
+
+        # 6) เสียงพากย์ + ซับ + ASMR บรรยากาศร้าน
+        _cb("🎧 ใส่เสียง + ASMR", 90)
+        ambient = stock_sfx.build_sfx_bed() if stock_sfx.available() else None
+        out = os.path.join(M, f"reel_{_uuid.uuid4().hex[:8]}.mp4")
+        final = vf._mux_audio(ff, visual, narr, ass, out, ambient)  # ลบ narr/ass ให้เอง
+        return final
+    finally:
+        for t in tmps:
+            if t and os.path.exists(t):
+                try: os.remove(t)
+                except Exception: pass
+
+
 def add_persona_pip(food_reel: str, face: str | None = None,
                     width: int = 380, corner: str = "tr") -> str | None:
     """รับคลิปอาหารที่มีเสียงพากย์แล้ว -> ใส่ persona พูดมุมจอ (ลิปซิงค์เสียงเดียวกัน)."""

@@ -219,6 +219,61 @@ def build_montage(store_id: int, label: str = "A", voice_name: str | None = None
         raise
 
 
+def build_restaurant(store_id: int, voice_name: str | None = None) -> dict:
+    """รีวิวในร้าน: พ่อครัวพูดชวน + แอคชั่น (Flow video ถ้ามี ไม่งั้น stock) + พ่อครัว PiP + ASMR."""
+    import os
+    from ..engines import talking_head, stock_video
+    key = f"rest-{store_id}"
+    name = _store_name(store_id)
+    try:
+        with get_session() as s:
+            store = s.get(Store, store_id)
+            if not store:
+                return {"error": "store not found"}
+            name = store.name
+            menu = jloads(store.menu_json, [])
+            vs = s.exec(select(Variant).where(Variant.store_id == store_id)).all()
+            scripts = [v.voiceover_script for v in vs if v.voiceover_script]
+            narration = scripts[0] if scripts else (
+                f"สวัสดีครับ ร้าน {name[:20]} อร่อยเด็ด เส้นนุ่ม น้ำซุปสูตรเด็ด "
+                "มาชิมกันเยอะๆ นะครับ รับรองไม่ผิดหวัง สั่งเลย ลิงก์อยู่ในคอมเมนต์ครับ")
+            flow_vids = [v.media_path for v in vs
+                         if v.media_path and os.path.basename(v.media_path).startswith("video_flow_")
+                         and os.path.exists(v.media_path)]
+            imgs = [v.image_path for v in vs if v.image_path and os.path.exists(v.image_path)]
+
+        _prog(key, name, "🍜 เตรียมสื่อ + footage", 6)
+        media = list(dict.fromkeys(flow_vids))            # Flow video จริงก่อน (เมนูเป๊ะ)
+        if len(media) < 3:                                # ไม่พอ → เติม stock ก๋วยเตี๋ยว
+            try:
+                media += stock_video.search_food_clips(stock_video.build_queries(name, menu), n=6)
+            except Exception as e:  # pragma: no cover
+                print(f"[restaurant] stock: {e}")
+        media += imgs[:2]
+        media = [m for m in dict.fromkeys(media) if m and os.path.exists(m)]
+        if not media:
+            _prog(key, name, "❌ ไม่มีสื่อ — รันร้านนี้ก่อน", 100, status="error")
+            return {"error": "no media"}
+
+        reel = talking_head.build_restaurant_reel(
+            media, narration, voice=voice_name,
+            progress_cb=lambda step, pct: _prog(key, name, step, pct))
+        if not reel:
+            _prog(key, name, "❌ สร้างรีวิวไม่สำเร็จ (ต้องมี persona พ่อครัว + เสียง)", 100, status="error")
+            return {"error": "build failed"}
+
+        with get_session() as s:
+            store = s.get(Store, store_id)
+            store.reel_url = "/media/" + os.path.basename(reel)
+            s.add(store); s.commit()
+            url = store.reel_url
+        _prog(key, name, "✅ รีวิวในร้านเสร็จ!", 100, status="done")
+        return {"reel_url": url}
+    except Exception as e:  # pragma: no cover
+        _prog(key, name, f"❌ {str(e)[:80]}", 100, status="error")
+        raise
+
+
 # ----------------------------------------------------------- A/B + auto-optimize
 def abtest_result(store_id: int) -> dict:
     """รวม metric ต่อ variant แล้วเทียบ A vs B (per platform) — ประกาศผู้ชนะเมื่อ impression ครบ."""

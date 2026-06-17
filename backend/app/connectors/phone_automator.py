@@ -89,14 +89,32 @@ def sync_media(device_ip: str, local_path: str) -> str:
 
 
 def human_type(d: u2.Device, text: str):
-    """จำลองการพิมพ์เป็นตัวอักษรทีละตัวเพื่อความสมจริง เลี่ยงบอทจับผิด"""
+    """พิมพ์ข้อความ — รองรับไทย/emoji ผ่าน FastInputIME (Unicode).
+
+    เดิมใช้ send_keys ทีละตัวบน IME ปกติ (ADB input text) ซึ่งรองรับแค่ ASCII
+    → แคปชั่นไทยออกมาเป็นตัวมั่ว. แก้: เปิด FastInputIME ของ uiautomator2 ก่อน
+    (รองรับ Unicode/emoji) แล้วพิมพ์ทีละคำ + หน่วงสุ่มให้ดูเป็นมนุษย์ (anti-detection).
+    """
+    import random
     d.clear_text()
-    time.sleep(0.5)
-    for char in text:
-        # uiautomator2 support send_keys
-        d.send_keys(char)
-        time.sleep(0.05 + (0.1 if char in " ะาิีึืุูะ" else 0.0))
-    time.sleep(1)
+    time.sleep(0.4)
+    try:
+        d.set_input_ime(True)          # สลับไป FastInputIME (Unicode) — สำคัญสุด
+        time.sleep(0.3)
+        for i, word in enumerate(text.split(" ")):
+            chunk = (" " if i else "") + word
+            d.send_keys(chunk, clear=False)            # ต่อท้ายทีละคำ (unicode-safe)
+            time.sleep(random.uniform(0.12, 0.35))     # จังหวะแบบมนุษย์
+        time.sleep(0.8)
+        return
+    except Exception as e:
+        logger.warning(f"[phone-farm] FastInputIME พิมพ์ไม่ได้ ({e}) → fallback ส่งทั้งข้อความ")
+        try:
+            d.clear_text(); time.sleep(0.3)
+            d.send_keys(text, clear=True)
+        except Exception as e2:
+            logger.error(f"[phone-farm] พิมพ์ caption ล้มเหลว: {e2}")
+        time.sleep(1)
 
 
 def capture_debug_screenshot(d: u2.Device, platform: str):

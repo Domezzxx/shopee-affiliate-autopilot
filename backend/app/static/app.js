@@ -87,6 +87,40 @@ $("#btn-preflight").onclick = async () => {
   alert(lines.join("\n"));
 };
 
+// ---------------- system on/off (master switch)
+let systemEnabled = true;
+function healthTip(h) {
+  if (!h) return "";
+  const yn = (v) => (v ? "✓" : "✗");
+  return [
+    `AI เขียนคอนเทนต์: ${yn(h.content_ai)}`,
+    `Flow video (Chrome debug): ${yn(h.flow_chrome)}`,
+    `มือถือ phone farm: ${h.phone_devices} เครื่อง`,
+    `Pexels: ${yn(h.stock_video)} · Freesound: ${yn(h.ambience_sfx)}`,
+    `Meta: ${yn(h.meta)} · YouTube: ${yn(h.youtube)} · โหมด: ${h.posting_mode}`,
+  ].join("\n");
+}
+async function loadSystem() {
+  try {
+    const s = await api("/system");
+    systemEnabled = s.enabled;
+    const b = $("#btn-system");
+    b.textContent = s.enabled ? "🟢 ระบบเปิด" : "🔴 ระบบปิด";
+    b.className = "sys " + (s.enabled ? "on" : "off");
+    b.title = healthTip(s.health);
+  } catch (e) {}
+}
+$("#btn-system").onclick = async () => {
+  const next = !systemEnabled;
+  if (!next && !confirm("ปิดระบบ? บอทจะหยุดรัน/โพสต์อัตโนมัติ\n(เปิดใหม่ทำงานต่อได้ปกติ)")) return;
+  try {
+    const r = await api(`/system/toggle?enable=${next}`, { method: "POST" });
+    systemEnabled = r.enabled;
+    toast(r.enabled ? "🟢 เปิดระบบแล้ว — บอทพร้อมทำงาน" : "🔴 ปิดระบบแล้ว — บอทหยุดทำงานอัตโนมัติ");
+    loadSystem();
+  } catch (e) { toast(e.message, true); }
+};
+
 // ---------------- banner (real vs mock)
 async function loadBanner() {
   const k = await api("/keys/status");
@@ -219,6 +253,13 @@ window.makeReel = async (id, label = "A") => {
     startProgress();
   } catch (e) { toast(e.message, true); }
 };
+window.makeRestaurant = async (id) => {
+  try {
+    await api(`/stores/${id}/restaurant-reel?voice=male`, { method: "POST" });
+    toast("เริ่มทำรีวิวในร้าน (พ่อครัวพูด) — ดูความคืบหน้าด้านบน · ~1-2 นาที");
+    startProgress();
+  } catch (e) { toast(e.message, true); }
+};
 window.toggleApproval = async (id, enable) => {
   try {
     await api(`/stores/${id}/toggle-approval?enable=${enable}`, { method: "POST" });
@@ -254,6 +295,7 @@ async function renderContent() {
           </select>
           <button class="go" onclick="makeReel(${st.id},'A')">🎬 รวมคลิป A</button>
           <button class="go" onclick="makeReel(${st.id},'B')">🎬 รวมคลิป B</button>
+          <button class="primary" onclick="makeRestaurant(${st.id})">🍜 รีวิวในร้าน</button>
         </span></div>
       ${isPending ? `<div class="banner mock" style="margin:8px 0 12px 0">⏳ คอนเทนต์ผลิตเสร็จแล้ว กำลังรอคุณอนุมัติเพื่อยิงโพสต์ออกไปยังแพลตฟอร์มต่าง ๆ</div>` : ""}
       ${c.reel_url ? `<div class="reelwrap"><div class="meta" style="margin-bottom:4px">คลิปรวม (montage) — โพสต์ได้เลย</div>
@@ -334,7 +376,7 @@ function render(tab) {
      platform: renderPlatform, flow: renderFlow }[tab] || (() => {}))();
 }
 async function loadAll() {
-  await Promise.all([loadBanner().catch(() => {}), loadKpis().catch((e) => toast(e.message, true))]);
+  await Promise.all([loadSystem().catch(() => {}), loadBanner().catch(() => {}), loadKpis().catch((e) => toast(e.message, true))]);
   const active = document.querySelector(".tabs button.active").dataset.tab;
   render(active);
 }
