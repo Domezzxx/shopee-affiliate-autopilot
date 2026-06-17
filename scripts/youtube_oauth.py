@@ -110,7 +110,8 @@ def main():
 
     auth_url = AUTH + "?" + urllib.parse.urlencode({
         "client_id": cid, "redirect_uri": REDIRECT, "response_type": "code",
-        "scope": SCOPE, "access_type": "offline", "prompt": "consent"})
+        "scope": SCOPE, "access_type": "offline",
+        "prompt": "select_account consent"})  # ให้เลือกบัญชี/ช่องใหม่ได้ทุกครั้ง
 
     srv = http.server.HTTPServer(("localhost", 8765), _Handler)
     threading.Thread(target=srv.handle_request, daemon=True).start()

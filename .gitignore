@@ -19,6 +19,9 @@ n8n/.n8n/
 scripts/cloudflared.exe
 scripts/*.log
 
+# Wav2Lip (clone + โมเดล ~500MB) สำหรับ AI persona lip-sync — โหลดเองด้วย scripts/setup_persona.ps1
+tools/
+
 # editor / os
 .idea/
 .vscode/

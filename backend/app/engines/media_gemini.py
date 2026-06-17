@@ -82,6 +82,49 @@ def generate_video(prompt: str) -> str:
         return _placeholder(prompt, "video")
 
 
+# มุมกล้องสไตล์ food reel ปังๆ — ใช้สร้างภาพหลายช็อตคนละมุม (แก้ปัญหาคลิปซ้ำ/น่าเบื่อ)
+_BROLL_ANGLES = [
+    "extreme macro close-up, steam rising, shallow depth of field, droplets glistening",
+    "top-down flat lay, ingredients and garnish arranged around the bowl, bright clean",
+    "chopsticks lifting noodles mid-air, broth dripping, dynamic motion, side angle",
+    "45-degree hero shot, garnish in sharp focus, creamy bokeh background, warm light",
+    "pouring broth / spooning sauce action shot, splash, appetizing, dramatic light",
+    "cozy hand holding the bowl, blurred restaurant background, lifestyle vibe",
+]
+
+
+def download_images(urls: list[str], n: int = 4) -> list[str]:
+    """โหลดรูปจริง (เช่นจาก Shopee) มาผสมในคลิป → ของจริง + AI = น่าเชื่อถือ.
+    Shopee อาจบล็อก hotlink (403) → ข้ามไฟล์ที่โหลดไม่ได้ คืนเท่าที่ได้."""
+    import httpx
+    out = []
+    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://shopee.co.th/"}
+    for u in [x for x in (urls or []) if x][:n]:
+        try:
+            r = httpx.get(u, timeout=30, follow_redirects=True, headers=headers)
+            if r.status_code == 200 and len(r.content) > 3000:
+                os.makedirs(settings.media_dir, exist_ok=True)
+                p = os.path.join(settings.media_dir, f"real_{uuid.uuid4().hex[:8]}.jpg")
+                with open(p, "wb") as f:
+                    f.write(r.content)
+                out.append(p)
+        except Exception as e:  # pragma: no cover
+            print(f"[img dl] {str(e)[:80]}")
+    return out
+
+
+def generate_food_broll(dish: str, n: int = 6) -> list[str]:
+    """สร้างภาพอาหารหลายมุมคนละช็อต (B-roll) จากเมนูเดียว → คลิปไม่ซ้ำ ดูมีชีวิต.
+    ไม่มี key → placeholder. คืน list ของ path ภาพ."""
+    dish = (dish or "delicious thai food").strip()
+    out = []
+    for ang in _BROLL_ANGLES[:max(1, n)]:
+        prompt = (f"appetizing professional food photography of {dish}, {ang}, "
+                  "vibrant mouthwatering colors, 9:16 vertical, ultra detailed, no text")
+        out.append(generate_image(prompt))
+    return out
+
+
 def make_media(image_prompt: str, video_prompt: str, hook: str = "") -> tuple[str, str, str]:
     """คืน (media_type, media_path, image_path) ตาม VIDEO_MODE.
     image_path = ภาพต้นฉบับ เก็บไว้ใช้ทำคลิปรวม (montage) ภายหลัง.

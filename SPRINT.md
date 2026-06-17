@@ -76,6 +76,16 @@
 - [ ] รอ user: Meta App + permission (pages_manage_posts, instagram_content_publish) + **App Review** (โปรดักชัน)
 - [ ] รอ user: รัน `scripts/youtube_oauth.py` (มี Google Cloud OAuth Desktop client)
 
+## ✅ Sprint 3.5 — Video Review Studio (รีวิวอาหารจริง ไม่ใช่สไลด์ — ฟรีล้วน)
+> แก้ "คลิปเหมือนสไลด์น่าเบื่อ" → คลิปรีวิวในร้านจริง มี motion + คน + เสียงบรรยากาศ
+- [x] **AI persona พูดได้ (Wav2Lip lip-sync, CPU, ฟรี)** — `engines/talking_head.py` (synthesize/overlay_pip วงกลม TikTok/add_persona_pip) + `scripts/setup_persona.ps1` (โหลดโมเดล+แพตช์ torch2.6/librosa). หน้า persona จาก Gemini: `influencer.png` (หนุ่ม PiP) + `chef.png` (ลุงพ่อครัวในร้าน)
+- [x] **โหมดรีวิวในร้าน** — พ่อครัวพูดเต็มจอเปิด (blurred-fill 9:16) → ตัดเข้าแอคชั่น + พ่อครัว PiP วงกลม → ปิดชวน (`scripts/_chef_demo.py`)
+- [x] **stock video จริง (Pexels)** — `engines/stock_video.py` + `build_queries` map เมนู→คิวรีเฉพาะ (เลี่ยง generic หลุดหัวข้อ/ราเมง). ⚠️ Pexels ไม่มีก๋วยเตี๋ยวเรือจริง → ได้แค่ noodle ใกล้เคียง (อยากเป๊ะต้อง Veo/ถ่ายเอง)
+- [x] **เสียงบรรยากาศร้าน (Freesound)** — `engines/stock_sfx.py` (เสียง chatter ในร้านยาวต่อเนื่อง ไม่วนลูป + re-encode กันไฟล์เสีย + retry). แก้บั๊กเสียงประตู 1วิวนรัว
+- [x] **`video_ffmpeg.py`:** เกรดสีอาหาร+vignette · xfade + ความเร็วแปรผัน (beat) · `build_review_reel` (เสียงพากย์ก่อน→ตัดภาพพอดี ไม่เหลือช่องว่าง + cap 22วิ) · `_video_clip` footage→9:16 · แยก `_mux_audio` (3-stream amix + retry)
+- [x] `media_gemini`: `generate_food_broll` (หลายมุม) + `download_images` (รูป Shopee จริง)
+- [ ] ค้าง: เก็บเป็น engine ถาวร `build_restaurant_reel` + wire ปุ่ม dashboard · ตัดสินใจ Veo สำหรับ footage เป๊ะ
+
 ## 🔜 Sprint 4 — Phone Farm จริง (6 เครื่อง)
 - [ ] ผูก uiautomator2 / Appium ต่อแอป (FB/IG/YouTube) — แตะปุ่ม+พิมพ์แคปชั่นจริง
 - [ ] จัดคิว + lock ต่อเครื่อง กันชนกัน + เช็คสุขภาพเครื่อง (online/offline)
