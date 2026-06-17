@@ -93,17 +93,40 @@ def _affiliate_link(store: Store) -> str:
     return store.affiliate_link or store.shopee_url or "(ยังไม่ได้ใส่ลิงก์ affiliate)"
 
 
+def _is_video_file(p: str) -> bool:
+    return bool(p) and p.lower().endswith((".mp4", ".mov", ".m4v", ".webm"))
+
+
 def publish_job(content_job_id: int) -> dict:
-    """ขั้น 4: ยิงทุก variant ออก platform (Hybrid) → วาง affiliate link เป็นคอมเมนต์แรกทันที."""
+    """ขั้น 4: ยิงทุก variant ออก platform (Hybrid) → วาง affiliate link คอมเมนต์แรก. อัปเดต progress ต่อ platform."""
+    import os
     posted = []
     with get_session() as s:
         variants = s.exec(select(Variant).where(Variant.content_job_id == content_job_id)).all()
+        if not variants:
+            return {"posted": []}
+        sid = variants[0].store_id
+        store0 = s.get(Store, sid)
+        name = store0.name if store0 else str(sid)
+        # YouTube ต้องไฟล์วีดีโอ — ถ้า variant เป็นภาพ ใช้ reel (คลิปรวม) ของร้านแทน
+        reel_local = ""
+        if store0 and store0.reel_url:
+            cand = os.path.join(settings.media_dir, os.path.basename(store0.reel_url))
+            if os.path.exists(cand):
+                reel_local = cand
+        n = len(variants)
         for idx, v in enumerate(variants):
+            _prog(sid, name, f"📤 โพสต์ {v.platform} {v.label}", 90 + int(idx / n * 9), detail=f"{idx + 1}/{n}")
             # โพสต์จริง: สุ่มหน่วงเวลาระหว่างโพสต์ กัน spam detection
             if idx and settings.enable_post_delay:
                 time.sleep(random.uniform(settings.post_delay_min, settings.post_delay_max) * 60)
             store = s.get(Store, v.store_id)
-            res = social.publish(v.platform, v.caption, v.media_path, title=v.video_title)
+            media = v.media_path
+            if v.platform == "youtube" and reel_local and not _is_video_file(media):
+                media = reel_local        # YouTube ต้องวีดีโอ → ใช้ reel แทนภาพ
+            res = social.publish(v.platform, v.caption, media, title=v.video_title)
+            _prog(sid, name, f"{'✅' if res['ok'] else '⚠️'} {v.platform} {v.label}",
+                  90 + int((idx + 1) / n * 9), detail=("สำเร็จ" if res["ok"] else "ไม่สำเร็จ"))
             p = Post(
                 variant_id=v.id, store_id=v.store_id, platform=v.platform,
                 method=res["method"], account=res["account"],
@@ -159,9 +182,17 @@ def run_full(store_id: int) -> dict:
             _prog(store_id, name, "⏳ รออนุมัติก่อนโพสต์", 100, status="done")
             return {**g, "status": "pending_approval", "detail": "Waiting for human approval"}
             
-        _prog(store_id, name, "📤 กำลังโพสต์/วางลิงก์", 92)
+        _prog(store_id, name, "📤 กำลังโพสต์/วางลิงก์", 90)
         p = publish_job(g["content_job_id"])
-        _prog(store_id, name, "✅ เสร็จแล้ว!", 100, status="done")
+        # สรุปผลโพสต์ต่อ platform (YT/FB/IG ✓/✗)
+        abbr = {"youtube": "YT", "facebook": "FB", "instagram": "IG", "shopee_video": "Shopee"}
+        by: dict = {}
+        for x in p.get("posted", []):
+            a = abbr.get(x.get("platform"), x.get("platform", "?"))
+            d = by.setdefault(a, [0, 0])
+            d[0 if x.get("ok") else 1] += 1
+        summary = " · ".join(f"{a} {ok}✓" + (f" {bad}✗" if bad else "") for a, (ok, bad) in by.items())
+        _prog(store_id, name, "✅ เสร็จ! " + summary, 100, status="done", detail="โพสต์แล้ว")
         return {**g, **p}
     except Exception as e:  # pragma: no cover
         _prog(store_id, _store_name(store_id), f"❌ ผิดพลาด: {str(e)[:80]}", 100, status="error")
