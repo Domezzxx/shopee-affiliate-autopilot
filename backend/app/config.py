@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     stock_video: bool = True          # ผสม footage จริงถ้ามี key
     freesound_api_key: str = ""       # ฟรี: https://freesound.org/apiv2/apply/ (เสียง ASMR ซด/ซิซเซิล)
 
+    # Google Flow automation settings
+    flow_cdp_url: str = "http://127.0.0.1:9222"
+    flow_selector_input: str = "div[role='textbox'], [role='textbox'], textarea[placeholder*='prompt' i]"
+    flow_selector_generate: str = "button:has-text('arrow_forwardสร้าง'), button:has-text('สร้าง'), button:has-text('Generate'), button:has-text('Create')"
+    flow_selector_download: str = "button:has-text('ดาวน์โหลด'), button:has-text('Download'), a[download]"
+
     # Audio — เสียงพากย์ไทย (edge-tts ฟรี) + เพลงประกอบ
     enable_voiceover: bool = True
     tts_voice: str = "th-TH-PremwadeeNeural"   # หรือ th-TH-NiwatNeural (เสียงผู้ชาย)
@@ -36,6 +42,7 @@ class Settings(BaseSettings):
     music_volume: float = 0.16                 # ระดับเพลงคลอใต้เสียงพากย์
     asmr_volume: float = 0.13                  # เสียงบรรยากาศร้าน (chatter เบาๆ) ใต้เสียงพากย์
     stock_video_ratio: int = 2                 # อัตราส่วน วีดีโอจริง:ภาพ (2 = วีดีโอจริงเป็นพระเอก)
+    affiliate_commission_per_click: float = 6.0 # ค่าคอมมิชชั่นเฉลี่ยสะสมต่อ 1 คลิก (บาท)
 
     # Meta (FB + IG)
     meta_page_id: str = ""

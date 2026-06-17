@@ -31,6 +31,7 @@ class Store(SQLModel, table=True):
     status: str = "new"              # new | active | paused
     low_ctr_days: int = 0            # นับวัน CTR ต่ำติดกัน → ถึงเกณฑ์แล้ว pause
     reel_url: str = ""               # คลิปรวม (montage A/B) ที่สร้างไว้
+    requires_approval: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -105,7 +106,7 @@ def _migrate() -> None:
         "variant": [("first_comment", "TEXT DEFAULT ''"), ("image_path", "TEXT DEFAULT ''"),
                     ("video_title", "TEXT DEFAULT ''")],
         "post": [("comment_id", "TEXT DEFAULT ''"), ("comment_status", "TEXT DEFAULT ''")],
-        "store": [("reel_url", "TEXT DEFAULT ''")],
+        "store": [("reel_url", "TEXT DEFAULT ''"), ("requires_approval", "BOOLEAN DEFAULT 0")],
     }
     with engine.begin() as conn:
         for table, cols in new_cols.items():

@@ -144,7 +144,7 @@ def image_to_reel(image_path: str, text: str = "") -> str | None:
     seg = _scene_clip(ff, image_path, text, max(3, settings.video_seconds), 0)
     if not seg:
         return None
-    out = os.path.join(settings.media_dir, f"video_{uuid.uuid4().hex[:8]}.mp4")
+    out = os.path.join(settings.media_dir, f"video_flow_{uuid.uuid4().hex[:8]}.mp4")
     shutil.move(seg, out)
     return out
 
@@ -576,3 +576,23 @@ def build_review_reel(media_items: list[str], narration: str = "", voice: str | 
         return final
     shutil.move(silent, out)
     return out
+
+
+def extract_frame(video_path: str) -> str | None:
+    """ดึงเฟรมแรกของวีดีโอออกมาเป็นรูปภาพเพื่อใช้ทำคลิปรวม (montage) และ thumbnail."""
+    if not video_path or not os.path.exists(video_path):
+        return None
+    ff = find_ffmpeg()
+    if not ff:
+        return None
+    out = video_path.rsplit(".", 1)[0] + "_thumb.png"
+    # ดึงเฟรมแรกที่วินาทีที่ 0.5
+    args = ["-ss", "0.5", "-i", video_path, "-vframes", "1", "-f", "image2", out]
+    if _run(ff, args):
+        return out
+    # หากล้มเหลวให้ลองที่วินาทีที่ 0.0
+    args = ["-ss", "0.0", "-i", video_path, "-vframes", "1", "-f", "image2", out]
+    if _run(ff, args):
+        return out
+    return None
+

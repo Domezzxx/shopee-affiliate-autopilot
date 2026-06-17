@@ -1,0 +1,194 @@
+import os
+import time
+import uuid
+import base64
+from playwright.sync_api import sync_playwright
+from ..config import settings
+
+def generate_video_flow(prompt: str) -> str:
+    """
+    Generate video short 9:16 using Google Flow web app via Playwright CDP.
+    Returns the absolute path of the downloaded mp4 file.
+    """
+    print(f"[flow-auto] Starting Google Flow video generation for prompt: {prompt}")
+    
+    # 1) Connect to Chrome CDP
+    pw = sync_playwright().start()
+    try:
+        browser = pw.chromium.connect_over_cdp(settings.flow_cdp_url)
+    except Exception as e:
+        pw.stop()
+        print(f"[flow-auto] Connection failed: {e}")
+        raise RuntimeError(
+            f"Cannot connect to Chrome at {settings.flow_cdp_url}. "
+            "Please ensure Chrome is running with remote debugging: "
+            "chrome.exe --remote-debugging-port=9222"
+        ) from e
+
+    try:
+        context = browser.contexts[0]
+        page = None
+        
+        # 2) Find existing tab
+        for p in context.pages:
+            if "labs.google" in p.url or "flow" in p.url:
+                page = p
+                print(f"[flow-auto] Reusing existing Google Flow tab: {page.url}")
+                break
+                
+        if not page:
+            print("[flow-auto] Opening new tab for Google Flow...")
+            page = context.new_page()
+            page.goto("https://labs.google/fx/th/tools/flow", timeout=60000)
+        
+        page.wait_for_load_state("load", timeout=20000)
+        
+        # 3) Handle Dashboard (Click "+ New Project" / "โปรเจ็กต์ใหม่" if present)
+        new_proj_selectors = [
+            "button:has-text('โปรเจ็กต์ใหม่')",
+            "button:has-text('โปรเจกต์ใหม่')",
+            "button:has-text('New project')",
+            "button:has-text('project')",
+            "button:has-text('+')"
+        ]
+        
+        for sel in new_proj_selectors:
+            btn = page.locator(sel).first
+            if btn.is_visible():
+                print(f"[flow-auto] Dashboard detected. Clicking '{sel}'...")
+                btn.click()
+                time.sleep(5)  # Wait for project editor to load
+                break
+        
+        # 4) Locate prompt input (Slate editor [role='textbox'])
+        print(f"[flow-auto] Locating prompt input using selector: {settings.flow_selector_input}")
+        input_locator = page.locator(settings.flow_selector_input).first
+        input_locator.wait_for(state="visible", timeout=15000)
+        
+        # Focus, select all, delete, and type
+        input_locator.click()
+        page.keyboard.press("Control+A")
+        page.keyboard.press("Delete")
+        time.sleep(0.5)
+        
+        # Use keyboard typing to trigger Slate/React events properly
+        print(f"[flow-auto] Typing prompt...")
+        page.keyboard.type(prompt)
+        time.sleep(1)
+        
+        # 5) Locate and click Generate button
+        print(f"[flow-auto] Locating generate button using selector: {settings.flow_selector_generate}")
+        gen_btn = page.locator(settings.flow_selector_generate).first
+        gen_btn.wait_for(state="visible", timeout=5000)
+        
+        # Wait until it is enabled (not aria-disabled="true")
+        print("[flow-auto] Waiting for generate button to be enabled...")
+        for _ in range(10):
+            aria_disabled = gen_btn.evaluate("el => el.getAttribute('aria-disabled')")
+            if aria_disabled != "true":
+                break
+            time.sleep(0.5)
+            
+        print("[flow-auto] Clicking Generate button...")
+        gen_btn.click()
+        
+        # 6) Wait for and click Approve button (อนุมัติ)
+        # Google Flow presents the generated video in the sidebar and requires approval.
+        print("[flow-auto] Waiting for Approve button...")
+        approve_selectors = [
+            "div:has-text('อนุมัติ ไม่ต้องถามอีก')",
+            "div:has-text('อนุมัติ')",
+            "div:has-text('Approve')",
+            "button:has-text('อนุมัติ')",
+            "button:has-text('Approve')"
+        ]
+        
+        approved = False
+        # Poll for approve button (up to 4 minutes)
+        for _ in range(48):
+            for sel in approve_selectors:
+                el = page.locator(sel).first
+                if el.is_visible():
+                    print(f"[flow-auto] Found Approve button: '{sel}'. Clicking...")
+                    el.click()
+                    approved = True
+                    break
+            if approved:
+                break
+            time.sleep(5)
+            
+        # 7) Wait for Video element to appear and be loaded (up to 5 minutes)
+        print("[flow-auto] Waiting for video element in DOM...")
+        video_locator = page.locator("video").first
+        video_locator.wait_for(state="attached", timeout=300000)
+        
+        video_url = ""
+        # Wait until video has a source URL
+        for _ in range(60):
+            video_url = video_locator.evaluate("el => el.src")
+            if video_url and "media.getMediaUrlRedirect" in video_url:
+                break
+            time.sleep(2)
+            
+        if not video_url:
+            raise RuntimeError("Timeout waiting for video source URL to be populated.")
+            
+        print(f"[flow-auto] Video generated! Direct URL: {video_url}")
+        
+        # 8) Download the video using browser context fetch
+        print("[flow-auto] Downloading video via browser context fetch...")
+        js_code = """
+        async (url) => {
+            const resp = await fetch(url);
+            const blob = await resp.blob();
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+        """
+        base64_data_url = page.evaluate(js_code, video_url)
+        
+        # Decode base64 bytes
+        header, encoded = base64_data_url.split(",", 1)
+        video_bytes = base64.b64decode(encoded)
+        
+        # Save to the media folder
+        media_dir = settings.media_dir
+        if media_dir == "/app/data/media":
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            media_dir = os.path.join(project_root, "data", "media")
+            
+        os.makedirs(media_dir, exist_ok=True)
+        filename = f"video_flow_{uuid.uuid4().hex[:8]}.mp4"
+        dest_path = os.path.join(media_dir, filename)
+        
+        with open(dest_path, "wb") as f:
+            f.write(video_bytes)
+            
+        print(f"[flow-auto] Video successfully generated and downloaded to: {dest_path} ({len(video_bytes)} bytes)")
+        return dest_path
+        
+    except Exception as e:
+        print(f"[flow-auto] Automation error: {e}")
+        # Capture screenshot for debugging
+        try:
+            media_dir = settings.media_dir
+            if media_dir == "/app/data/media":
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                media_dir = os.path.join(project_root, "data", "media")
+            os.makedirs(media_dir, exist_ok=True)
+            scr_path = os.path.join(media_dir, f"error_flow_{uuid.uuid4().hex[:8]}.png")
+            page.screenshot(path=scr_path)
+            print(f"[flow-auto] Screenshot saved for debugging: {scr_path}")
+        except:
+            pass
+        raise e
+    finally:
+        # Disconnect CDP connection cleanly without closing the user's Chrome
+        try:
+            pw.stop()
+        except:
+            pass

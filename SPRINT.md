@@ -84,12 +84,13 @@
 - [x] **เสียงบรรยากาศร้าน (Freesound)** — `engines/stock_sfx.py` (เสียง chatter ในร้านยาวต่อเนื่อง ไม่วนลูป + re-encode กันไฟล์เสีย + retry). แก้บั๊กเสียงประตู 1วิวนรัว
 - [x] **`video_ffmpeg.py`:** เกรดสีอาหาร+vignette · xfade + ความเร็วแปรผัน (beat) · `build_review_reel` (เสียงพากย์ก่อน→ตัดภาพพอดี ไม่เหลือช่องว่าง + cap 22วิ) · `_video_clip` footage→9:16 · แยก `_mux_audio` (3-stream amix + retry)
 - [x] `media_gemini`: `generate_food_broll` (หลายมุม) + `download_images` (รูป Shopee จริง)
+- [x] **Google Flow AI Browser Automation (ฟรีผ่าน Chrome Debugging)** — พัฒนาสคริปต์ Playwright CDP ควบคุม Chrome เจนวิดีโอฟรีผ่านหน้าเว็บ Google Flow ลดต้นทุน Veo API
 - [ ] ค้าง: เก็บเป็น engine ถาวร `build_restaurant_reel` + wire ปุ่ม dashboard · ตัดสินใจ Veo สำหรับ footage เป๊ะ
 
-## 🔜 Sprint 4 — Phone Farm จริง (6 เครื่อง)
-- [ ] ผูก uiautomator2 / Appium ต่อแอป (FB/IG/YouTube) — แตะปุ่ม+พิมพ์แคปชั่นจริง
-- [ ] จัดคิว + lock ต่อเครื่อง กันชนกัน + เช็คสุขภาพเครื่อง (online/offline)
-- [ ] anti-detection: สลับบัญชี, สุ่ม delay, จำลอง human behavior
+## ✅ Sprint 4 — Phone Farm จริง (6 เครื่อง) (เสร็จสมบูรณ์)
+- [x] ผูก uiautomator2 ต่อแอป (FB/IG/YouTube) — แตะปุ่ม+พิมพ์แคปชั่นจริง อัปเดตไฟล์มีเดียแกลเลอรีอัตโนมัติ
+- [x] จัดคิว + lock ต่อเครื่อง ด้วย Thread Locking กันชนกัน + ตรวจสอบสถานะการเชื่อมต่อ (online/offline)
+- [x] anti-detection: จำลองการป้อนตัวอักษรแบบพิมพ์จริงทีละอักษร (Humanized typing) + หน่วงเวลาสุ่มป้องกันการแบน
 
 ## 🔜 Sprint 5 — Optimize + Scale
 - [ ] ดึง metric จริงจาก platform (FB Insights / IG / YouTube Analytics) เข้า /api/metrics

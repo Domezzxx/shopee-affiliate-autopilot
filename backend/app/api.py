@@ -134,12 +134,33 @@ def list_stores(status: str | None = None):
         if status:
             q = q.where(Store.status == status)
         rows = s.exec(q).all()
-        return [{
-            "id": r.id, "name": r.name, "area": r.area, "rating": r.rating,
-            "review_count": r.review_count, "menu": jloads(r.menu_json, []),
-            "status": r.status, "low_ctr_days": r.low_ctr_days,
-            "affiliate_link": r.affiliate_link,
-        } for r in rows]
+        
+        res = []
+        for r in rows:
+            # 1. Sum cost from ContentJob
+            jobs = s.exec(select(ContentJob).where(ContentJob.store_id == r.id)).all()
+            cost = sum(j.cost_baht for j in jobs)
+            
+            # 2. Sum clicks from Metric
+            metrics = s.exec(select(Metric).where(Metric.store_id == r.id)).all()
+            clicks = sum(m.clicks for m in metrics)
+            
+            # 3. Calculate revenue and profit
+            rev = clicks * settings.affiliate_commission_per_click
+            profit = rev - cost
+            
+            res.append({
+                "id": r.id, "name": r.name, "area": r.area, "rating": r.rating,
+                "review_count": r.review_count, "menu": jloads(r.menu_json, []),
+                "status": r.status, "low_ctr_days": r.low_ctr_days,
+                "affiliate_link": r.affiliate_link,
+                "requires_approval": r.requires_approval,
+                "cost": round(cost, 2),
+                "clicks": clicks,
+                "revenue": round(rev, 2),
+                "profit": round(profit, 2),
+            })
+        return res
 
 
 # ----------------------------------------------------------------- pipeline
@@ -179,13 +200,58 @@ def run_all(background: BackgroundTasks, limit: int = 20):
 
 @router.get("/content/{store_id}")
 def get_content(store_id: int):
+    import os
     with get_session() as s:
         store = s.get(Store, store_id)
         link = (store.affiliate_link or store.shopee_url or "(ลิงก์)") if store else "(ลิงก์)"
-        jobs = s.exec(select(ContentJob).where(ContentJob.store_id == store_id)).all()
-        variants = s.exec(select(Variant).where(Variant.store_id == store_id)).all()
+        
+        # ค้นหา ContentJob ล่าสุดเท่านั้น เพื่อเอา mockup รอบเก่าออกและแสดงเฉพาะคลิปจริงรอบล่าสุดจากบอท
+        latest_job = s.exec(
+            select(ContentJob)
+            .where(ContentJob.store_id == store_id)
+            .order_by(ContentJob.created_at.desc())
+            .limit(1)
+        ).first()
+        
+        valid_variants = []
+        if latest_job:
+            jobs = [latest_job]
+            variants = s.exec(select(Variant).where(Variant.content_job_id == latest_job.id)).all()
+            for v in variants:
+                if not v.media_path:
+                    continue
+                filename = os.path.basename(v.media_path)
+                # วิดีโอจริงจากบอทต้องเริ่มด้วย video_flow_ เท่านั้น และห้ามเป็นไฟล์ .png ปลอม
+                if v.media_type == "video":
+                    if not filename.lower().startswith("video_flow_") or filename.lower().endswith(".png"):
+                        continue
+                # ตรวจสอบการมีอยู่จริงของไฟล์ในเครื่อง
+                full_path = v.media_path
+                if not os.path.isabs(full_path):
+                    full_path = os.path.join(settings.media_dir, filename)
+                if os.path.exists(full_path):
+                    valid_variants.append(v)
+        else:
+            jobs = []
+            
+        reel_url = store.reel_url if store else ""
+        if reel_url and latest_job:
+            # เช็ควันเวลาแก้ไขไฟล์คลิปรวม (Reel) หากสร้างก่อนงานสร้างวิดีโอล่าสุด แปลว่าเป็นของเก่า/Mockup
+            filename = os.path.basename(reel_url)
+            full_path = os.path.join(settings.media_dir, filename)
+            if os.path.exists(full_path):
+                mtime = os.path.getmtime(full_path)
+                mtime_dt = datetime.utcfromtimestamp(mtime)
+                if mtime_dt < latest_job.created_at:
+                    reel_url = ""
+            else:
+                reel_url = ""
+        
+        if not valid_variants:
+            reel_url = ""
+            
         return {
-            "reel_url": store.reel_url if store else "",
+            "reel_url": reel_url,
             "jobs": [{"id": j.id, "status": j.status, "analysis": jloads(j.analysis_json, {}),
                       "schedule": jloads(j.schedule_json, []), "cost_baht": j.cost_baht,
                       "model": j.model_used} for j in jobs],
@@ -195,7 +261,7 @@ def get_content(store_id: int):
                           "hashtags": jloads(v.hashtags_json, []),
                           "media_type": v.media_type,
                           "media_url": ("/media/" + v.media_path.replace("\\", "/").split("/")[-1]) if v.media_path else ""}
-                         for v in variants],
+                         for v in valid_variants],
         }
 
 
@@ -303,21 +369,68 @@ def keys_status():
 # ----------------------------------------------------------------- dashboard summary
 @router.get("/dashboard")
 def dashboard():
+    import os
     with get_session() as s:
         stores = s.exec(select(Store)).all()
-        posts = s.exec(select(Post)).all()
-        metrics = s.exec(select(Metric)).all()
         jobs = s.exec(select(ContentJob)).all()
-        imp = sum(m.impressions for m in metrics)
-        clk = sum(m.clicks for m in metrics)
+        
+        # 1) ดึงเฉพาะ ContentJob ล่าสุดของแต่ละร้านที่เกิดจากบอทจริงๆ (มีวิดีโอ video_flow_ เท่านั้น)
+        latest_job_ids = []
+        for store in stores:
+            latest_job = s.exec(
+                select(ContentJob)
+                .where(ContentJob.store_id == store.id)
+                .order_by(ContentJob.created_at.desc())
+                .limit(1)
+            ).first()
+            if latest_job:
+                variants = s.exec(select(Variant).where(Variant.content_job_id == latest_job.id)).all()
+                has_bot_media = any(
+                    v.media_path and os.path.basename(v.media_path).lower().startswith("video_flow_")
+                    for v in variants
+                )
+                if has_bot_media:
+                    latest_job_ids.append(latest_job.id)
+        
+        # 2) ดึงเฉพาะ Post ที่เชื่อมโยงกับ ContentJob ล่าสุดเท่านั้น
+        if latest_job_ids:
+            posts = s.exec(
+                select(Post)
+                .join(Variant, Post.variant_id == Variant.id)
+                .where(Variant.content_job_id.in_(latest_job_ids))
+            ).all()
+        else:
+            posts = []
+            
+        post_ids = {p.id for p in posts}
+        metrics = s.exec(select(Metric)).all()
+        
+        # 3) กรองเฉพาะ Metric ที่เชื่อมโยงกับ Post ในข้อ 2
+        active_metrics = [m for m in metrics if m.post_id in post_ids]
+        
+        imp = sum(m.impressions for m in active_metrics)
+        clk = sum(m.clicks for m in active_metrics)
         per_plat: dict[str, dict] = {}
         pmap = {p.id: p for p in posts}
-        for m in metrics:
+        
+        for m in active_metrics:
             plat = pmap.get(m.post_id).platform if pmap.get(m.post_id) else "?"
             d = per_plat.setdefault(plat, {"impressions": 0, "clicks": 0})
             d["impressions"] += m.impressions; d["clicks"] += m.clicks
+            
         for d in per_plat.values():
             d["ctr"] = round(d["clicks"] / d["impressions"], 4) if d["impressions"] else 0.0
+            
+        # ค้นหาทุกงานที่เป็นบอทจริงในระบบเพื่อคิดค่าใช้จ่ายสะสม
+        bot_job_ids = []
+        for j in jobs:
+            v_list = s.exec(select(Variant).where(Variant.content_job_id == j.id)).all()
+            if any(v.media_path and os.path.basename(v.media_path).lower().startswith("video_flow_") for v in v_list):
+                bot_job_ids.append(j.id)
+        bot_cost = sum(j.cost_baht for j in jobs if j.id in bot_job_ids)
+        total_rev = clk * settings.affiliate_commission_per_click
+        total_profit = total_rev - bot_cost
+            
         return {
             "stores_total": len(stores),
             "stores_active": sum(1 for x in stores if x.status == "active"),
@@ -327,7 +440,9 @@ def dashboard():
             "comments_posted": sum(1 for p in posts if p.comment_status == "posted"),
             "impressions": imp, "clicks": clk,
             "ctr": round(clk / imp, 4) if imp else 0.0,
-            "content_cost_baht": round(sum(j.cost_baht for j in jobs), 2),
+            "content_cost_baht": round(bot_cost, 2),
+            "revenue_baht": round(total_rev, 2),
+            "profit_baht": round(total_profit, 2),
             "by_platform": per_plat,
             "config": {
                 "posting_mode": settings.posting_mode,
@@ -338,3 +453,32 @@ def dashboard():
                 "real_mode": settings.content_ready,
             },
         }
+
+
+@router.post("/jobs/{job_id}/approve")
+def approve_job(job_id: int, background: BackgroundTasks):
+    """อนุมัติและสั่งโพสต์งานที่ติดสถานะ pending_approval ในเบื้องหลัง."""
+    with get_session() as s:
+        job = s.get(ContentJob, job_id)
+        if not job:
+            raise HTTPException(404, "job not found")
+        if job.status != "pending_approval":
+            raise HTTPException(400, f"job status is {job.status}, not pending_approval")
+        job.status = "media_ready"
+        s.add(job)
+        s.commit()
+    background.add_task(pipeline.publish_job, job_id)
+    return {"status": "started", "job_id": job_id}
+
+
+@router.post("/stores/{store_id}/toggle-approval")
+def toggle_approval(store_id: int, enable: bool):
+    """เปิด/ปิด การรออนุมัติคอนเทนต์ก่อนโพสต์ของร้านค้า."""
+    with get_session() as s:
+        store = s.get(Store, store_id)
+        if not store:
+            raise HTTPException(404, "store not found")
+        store.requires_approval = enable
+        s.add(store)
+        s.commit()
+    return {"id": store_id, "requires_approval": enable}

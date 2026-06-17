@@ -72,7 +72,7 @@ def generate_for_store(store_id: int) -> dict:
         for i, v in enumerate(variants):
             _prog(store_id, name, f"🎬 สร้างสื่อ {i + 1}/{total}", 18 + int(i / total * 64),
                   detail=f"{v['platform']} · {v['label']}")
-            mtype, mpath, ipath = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"])
+            mtype, mpath, ipath = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"], v["label"])
             s.add(Variant(
                 content_job_id=job.id, store_id=store.id, label=v["label"],
                 platform=v["platform"], hook=v["hook"],
@@ -142,6 +142,23 @@ def run_full(store_id: int) -> dict:
             _prog(store_id, _store_name(store_id), "❌ " + g["error"], 100, status="error")
             return g
         name = _store_name(store_id)
+        
+        # ตรวจสอบว่าร้านค้าต้องการอนุมัติก่อนโพสต์หรือไม่
+        with get_session() as s:
+            store = s.get(Store, store_id)
+            requires_approval = store.requires_approval if store else False
+            
+        if requires_approval:
+            # เปลี่ยนสถานะงาน ContentJob เป็น pending_approval
+            with get_session() as s:
+                job = s.get(ContentJob, g["content_job_id"])
+                if job:
+                    job.status = "pending_approval"
+                    s.add(job)
+                    s.commit()
+            _prog(store_id, name, "⏳ รออนุมัติก่อนโพสต์", 100, status="done")
+            return {**g, "status": "pending_approval", "detail": "Waiting for human approval"}
+            
         _prog(store_id, name, "📤 กำลังโพสต์/วางลิงก์", 92)
         p = publish_job(g["content_job_id"])
         _prog(store_id, name, "✅ เสร็จแล้ว!", 100, status="done")
@@ -168,8 +185,15 @@ def build_montage(store_id: int, label: str = "A", voice_name: str | None = None
             scenes, narration, seen = [], [], set()
             for v in vs:
                 img = v.image_path or (v.media_path if v.media_type == "image" else "")
+                if (not img or not os.path.exists(img)) and v.media_type == "video" and v.media_path and os.path.exists(v.media_path):
+                    thumb = video_ffmpeg.extract_frame(v.media_path)
+                    if thumb:
+                        v.image_path = thumb
+                        s.add(v)
+                        img = thumb
                 if img and os.path.exists(img) and img not in seen:
                     seen.add(img); scenes.append((img, v.hook)); narration.append(v.voiceover_script or v.hook)
+            s.commit()
             cta = [name[:24], "สั่งเลยตอนนี้!", "ลิงก์ในคอมเมนต์แรก"]
         if not scenes:
             _prog(key, name, "❌ ไม่มีภาพต้นฉบับ — รันร้านนี้ใหม่ก่อน", 100, status="error", detail=det)

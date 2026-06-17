@@ -1,5 +1,7 @@
 {
+  "id": "afltautopilotscrape01",
   "name": "1 — Scrape Shopee Food → Ingest",
+  "active": false,
   "nodes": [
     {
       "parameters": {
@@ -45,7 +47,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://127.0.0.1:8088/api/ingest",
+        "url": "http://127.0.0.1:8088/api/ingest",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}"

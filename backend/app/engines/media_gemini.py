@@ -60,25 +60,38 @@ def generate_image(prompt: str) -> str:
 
 
 def generate_video(prompt: str) -> str:
-    """สร้างวีดีโอสั้น 9:16 ด้วย Veo → คืน path ไฟล์ mp4."""
-    if not settings.has_gemini or not settings.enable_video:
+    """สร้างวีดีโอสั้น 9:16 ด้วย Google Flow Browser Automation (ฟรี) โดยมี fallback ไปที่ Veo API."""
+    if not settings.enable_video:
         return _placeholder(prompt, "video")
+    
+    # 1) ลองรันด้วย Browser Automation (Flow) ก่อนเพื่อประหยัดเงินตามที่คุณกอล์ฟเลือก
     try:
-        client = _client()
-        op = client.models.generate_videos(model=settings.video_model, prompt=prompt)
-        for _ in range(30):                       # poll สูงสุด ~5 นาที
-            if op.done:
-                break
-            time.sleep(10)
-            op = client.operations.get(op)
-        vid = op.response.generated_videos[0]
-        os.makedirs(settings.media_dir, exist_ok=True)
-        path = os.path.join(settings.media_dir, f"video_{uuid.uuid4().hex[:8]}.mp4")
-        client.files.download(file=vid.video)
-        vid.video.save(path)
-        return path
-    except Exception as e:  # pragma: no cover
-        print(f"[gemini] video error: {e}")
+        from .flow_automation import generate_video_flow
+        return generate_video_flow(prompt)
+    except Exception as e:
+        print(f"[flow-auto-fallback] Failed browser automation: {e}")
+        print("[flow-auto-fallback] Attempting to fall back to Veo API...")
+        
+        # 2) Fallback ไปที่ Veo API หากมีคีย์จริง (เริ่มด้วย AIzaSy)
+        if settings.has_gemini and settings.gemini_api_key.startswith("AIzaSy"):
+            try:
+                client = _client()
+                op = client.models.generate_videos(model=settings.video_model, prompt=prompt)
+                for _ in range(30):                       # poll สูงสุด ~5 นาที
+                    if op.done:
+                        break
+                    time.sleep(10)
+                    op = client.operations.get(op)
+                vid = op.response.generated_videos[0]
+                os.makedirs(settings.media_dir, exist_ok=True)
+                path = os.path.join(settings.media_dir, f"video_flow_{uuid.uuid4().hex[:8]}.mp4")
+                client.files.download(file=vid.video)
+                vid.video.save(path)
+                return path
+            except Exception as api_err:
+                print(f"[gemini] veo api error: {api_err}")
+        
+        # 3) Fallback ไปที่ Placeholder หากระบบใช้ไม่ได้เลย
         return _placeholder(prompt, "video")
 
 
@@ -125,17 +138,61 @@ def generate_food_broll(dish: str, n: int = 6) -> list[str]:
     return out
 
 
-def make_media(image_prompt: str, video_prompt: str, hook: str = "") -> tuple[str, str, str]:
+def make_media(image_prompt: str, video_prompt: str, hook: str = "", voiceover_script: str = "", label: str = "A") -> tuple[str, str, str]:
     """คืน (media_type, media_path, image_path) ตาม VIDEO_MODE.
     image_path = ภาพต้นฉบับ เก็บไว้ใช้ทำคลิปรวม (montage) ภายหลัง.
     image  = ภาพนิ่ง 9:16 (ฟรี) · ffmpeg = ภาพ AI → วีดีโอ Reels ฟรี · veo = Veo (เสียเงิน)."""
     mode = settings.video_mode
+    voice = "th-TH-PremwadeeNeural" if label == "A" else "th-TH-NiwatNeural"
+
     if mode == "veo" or (settings.enable_video and mode == "image"):
-        return "video", generate_video(video_prompt), ""
-    if mode == "ffmpeg":
-        img = generate_image(image_prompt)              # ภาพฟรีจาก Gemini ก่อน
+        vid = generate_video(video_prompt)
         from . import video_ffmpeg
-        vid = video_ffmpeg.image_to_reel(img, hook)     # แปลงเป็นวีดีโอ
+        img = video_ffmpeg.extract_frame(vid) or ""
+        # Add voiceover and subtitles to Veo/Automation video if voiceover is enabled
+        if settings.enable_voiceover and voiceover_script:
+            ff = video_ffmpeg.find_ffmpeg()
+            if ff:
+                out_vid = os.path.join(settings.media_dir, f"video_flow_{uuid.uuid4().hex[:8]}.mp4")
+                final = video_ffmpeg.add_audio(ff, vid, voiceover_script, out_vid, voice)
+                if final:
+                    if os.path.exists(vid) and "video_flow" not in os.path.basename(vid):
+                        try:
+                            os.remove(vid)
+                        except:
+                            pass
+                    vid = final
+        return "video", vid, img
+
+    if mode == "ffmpeg":
+        img = generate_image(image_prompt)
+        from . import video_ffmpeg
+        # If voiceover is enabled and we have a script, generate a video synchronized to the voiceover
+        if settings.enable_voiceover and voiceover_script:
+            ff = video_ffmpeg.find_ffmpeg()
+            if ff:
+                # 1. Generate narration and subtitles
+                narr, ass = video_ffmpeg.build_voice_captions(ff, voiceover_script, voice)
+                if narr:
+                    vdur = video_ffmpeg._duration(narr) or max(3, settings.video_seconds)
+                    # 2. Generate scene clip with exact duration of the voiceover
+                    seg = video_ffmpeg._scene_clip(ff, img, "", vdur, 0)
+                    if seg:
+                        out_vid = os.path.join(settings.media_dir, f"video_flow_{uuid.uuid4().hex[:8]}.mp4")
+                        # 3. Mix audio (narration, music, subtitles)
+                        # _mux_audio cleans up narr and ass automatically
+                        final = video_ffmpeg._mux_audio(ff, seg, narr, ass, out_vid)
+                        if os.path.exists(seg):
+                            try:
+                                os.remove(seg)
+                            except:
+                                pass
+                        if final:
+                            return "video", final, img
+        
+        # Fallback to silent video with only hook text if voiceover is not enabled or failed
+        vid = video_ffmpeg.image_to_reel(img, hook)
         return ("video", vid, img) if vid else ("image", img, img)
+
     img = generate_image(image_prompt)
     return "image", img, img

@@ -105,13 +105,15 @@ async function loadKpis() {
   const d = await api("/dashboard");
   const c = d.config;
   const sw = (ok) => `<span class="${ok ? "ok" : "dim"}">${ok ? "●" : "○"}</span>`;
+  const profitColor = d.profit_baht >= 0 ? "ok" : "bad";
+  const profitSign = d.profit_baht >= 0 ? "+฿" : "-฿";
   $("#kpis").innerHTML = `
     <div class="kpi"><div class="v">${d.stores_total}</div><div class="l">ร้านทั้งหมด</div>
       <div class="s"><span class="ok">${d.stores_active} active</span> · <span class="bad">${d.stores_paused} paused</span></div></div>
     <div class="kpi"><div class="v">${d.posts_total}</div><div class="l">โพสต์</div>
       <div class="s bad">${d.posts_failed} ล้มเหลว</div></div>
-    <div class="kpi"><div class="v">${(d.comments_posted ?? 0).toLocaleString()}</div><div class="l">คอมเมนต์ลิงก์</div>
-      <div class="s dim">affiliate link วางแล้ว</div></div>
+    <div class="kpi"><div class="v">฿${d.revenue_baht.toLocaleString()}</div><div class="l">รายได้ประเมิน</div>
+      <div class="s ${profitColor}">${profitSign}${Math.abs(d.profit_baht).toLocaleString()} กำไรสุทธิ</div></div>
     <div class="kpi"><div class="v">${d.impressions.toLocaleString()}</div><div class="l">Impressions</div></div>
     <div class="kpi"><div class="v">${(d.ctr * 100).toFixed(2)}%</div><div class="l">CTR เฉลี่ย</div></div>
     <div class="kpi"><div class="v">฿${d.content_cost_baht}</div><div class="l">ค่า AI เขียน (สะสม)</div></div>
@@ -153,7 +155,17 @@ async function renderStores() {
       <div class="meta">${esc(x.area) || "—"} · ⭐${x.rating} (${x.review_count} รีวิว)</div>
       <div class="meta">เมนู: ${esc((x.menu || []).slice(0, 3).join(", ")) || "—"}</div>
       <div class="meta">${x.affiliate_link ? "🔗 มีลิงก์" : '<span class="bad">⚠ ยังไม่มีลิงก์</span>'}</div>
-      <div class="row">
+      <div class="meta" style="margin-top:6px; font-weight:600">
+        <span>ทุน: ฿${x.cost}</span> · 
+        <span class="${x.profit >= 0 ? 'ok' : 'bad'}">กำไร: ฿${x.profit}</span>
+      </div>
+      <div class="meta" style="margin-top:6px">
+        <label style="cursor:pointer; display:flex; align-items:center; gap:6px; user-select:none">
+          <input type="checkbox" ${x.requires_approval ? "checked" : ""} onchange="toggleApproval(${x.id}, this.checked)" />
+          ต้องการอนุมัติก่อนโพสต์
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px">
         <span class="badge ${x.status}">${x.status}${x.low_ctr_days ? " " + x.low_ctr_days + "วัน" : ""}</span>
         <button class="go" onclick="runStore(${x.id})">▶ รันร้านนี้</button>
       </div>
@@ -207,6 +219,20 @@ window.makeReel = async (id, label = "A") => {
     startProgress();
   } catch (e) { toast(e.message, true); }
 };
+window.toggleApproval = async (id, enable) => {
+  try {
+    await api(`/stores/${id}/toggle-approval?enable=${enable}`, { method: "POST" });
+    toast("อัปเดตการตั้งค่าการอนุมัติแล้ว");
+    loadAll();
+  } catch (e) { toast(e.message, true); }
+};
+window.approveJob = async (id) => {
+  try {
+    await api(`/jobs/${id}/approve`, { method: "POST" });
+    toast("อนุมัติงานและกำลังโพสต์เบื้องหลัง...");
+    loadAll(); startProgress();
+  } catch (e) { toast(e.message, true); }
+};
 
 // ---------------- content + A/B
 async function renderContent() {
@@ -215,10 +241,13 @@ async function renderContent() {
   for (const st of s.filter((x) => x.status !== "new").slice(0, 20)) {
     const c = await api(`/content/${st.id}`).catch(() => null);
     if (!c || !c.variants.length) continue;
+    const latestJob = c.jobs[0] || {};
+    const isPending = latestJob.status === "pending_approval";
     const ab = await api(`/abtest/${st.id}`).catch(() => ({ verdict: {} }));
     html += `<div class="card" style="margin-bottom:14px">
       <div class="row"><h4>${esc(st.name)}</h4>
         <span>
+          ${isPending ? `<button class="primary" style="margin-right:6px" onclick="approveJob(${latestJob.id})">✅ อนุมัติ & โพสต์</button>` : ""}
           <select id="voice-sel-${st.id}" class="voicesel">
             <option value="female">👩 เสียงผู้หญิง</option>
             <option value="male">👨 เสียงผู้ชาย</option>
@@ -226,6 +255,7 @@ async function renderContent() {
           <button class="go" onclick="makeReel(${st.id},'A')">🎬 รวมคลิป A</button>
           <button class="go" onclick="makeReel(${st.id},'B')">🎬 รวมคลิป B</button>
         </span></div>
+      ${isPending ? `<div class="banner mock" style="margin:8px 0 12px 0">⏳ คอนเทนต์ผลิตเสร็จแล้ว กำลังรอคุณอนุมัติเพื่อยิงโพสต์ออกไปยังแพลตฟอร์มต่าง ๆ</div>` : ""}
       ${c.reel_url ? `<div class="reelwrap"><div class="meta" style="margin-bottom:4px">คลิปรวม (montage) — โพสต์ได้เลย</div>
         <video class="reel" src="${c.reel_url}" controls loop playsinline></video></div>` : ""}
       <div class="preview">${c.variants.map((v) => `
