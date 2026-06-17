@@ -37,6 +37,7 @@ CONTENT_SCHEMA: dict[str, Any] = {
                     "label": {"type": "string", "enum": ["A", "B"]},
                     "platform": {"type": "string", "enum": PLATFORMS},
                     "hook": {"type": "string"},
+                    "video_title": {"type": "string"},
                     "caption": {"type": "string"},
                     "hashtags": {"type": "array", "items": {"type": "string"}},
                     "cta": {"type": "string"},
@@ -45,7 +46,7 @@ CONTENT_SCHEMA: dict[str, Any] = {
                     "image_prompt": {"type": "string"},
                     "video_prompt": {"type": "string"},
                 },
-                "required": ["label", "platform", "hook", "caption", "hashtags",
+                "required": ["label", "platform", "hook", "video_title", "caption", "hashtags",
                              "cta", "first_comment", "voiceover_script",
                              "image_prompt", "video_prompt"],
             },
@@ -67,21 +68,28 @@ CONTENT_SCHEMA: dict[str, Any] = {
     "required": ["store_analysis", "variants", "posting_schedule"],
 }
 
-# จูนใหม่ (Sprint 2): สั่งให้เขียนแบบ hook 3 วินาทีแรก + A/B ต่างมุมจริง + เขียนคอมเมนต์แรก
+# สมองสคริปต์ระดับโลก (Sprint 3): hook ดึง + voiceover แบบ spoken-word (กลายเป็นซับเด้งตามเสียง)
 SYSTEM = (
-    "คุณคือครีเอเตอร์สาย food affiliate อันดับ 1 ของไทย ทำคอนเทนต์ไวรัลให้ "
-    "Facebook Reels / Instagram Reels / YouTube Shorts จนคนหยุดนิ้วแล้วสั่งทันที.\n"
-    "กติกาการเขียน:\n"
-    "1) HOOK 3 วิแรกต้องสะดุด — ใช้ความอยาก/ดราม่าหิว/ตัวเลขคุ้ม ไม่ใช่บรรยายเฉยๆ.\n"
-    "2) caption สั้น กระชับ มี emoji พอดี เว้นบรรทัดอ่านง่าย ปิดด้วย CTA ชวนกดลิงก์คอมเมนต์แรก.\n"
-    "3) A กับ B ต้องต่าง 'มุม' กันจริง เพื่อ A/B test: "
-    "A = สายคุ้ม/โปร/ราคา, B = สายอร่อย/ฟิน/ดราม่าหิว. ห้ามเขียนคล้ายกัน.\n"
-    "4) ปรับโทนตาม platform: FB=เล่าให้ญาติผู้ใหญ่แชร์ได้, IG=ฮิป มินิมอล เก๋, YouTube=ปากต่อปากเล่าเรื่อง.\n"
-    "5) first_comment = ข้อความคอมเมนต์แรกที่จะวาง affiliate link "
-    "(เขียนชวนกดสั้นๆ + ใส่ {LINK} เป็น placeholder ให้ระบบแทนลิงก์จริง).\n"
-    "6) hashtags 4-6 อัน ผสมแท็กพื้นที่ + แท็กอาหาร + #ShopeeFood.\n"
-    "7) image_prompt/video_prompt เขียนภาษาอังกฤษ สื่ออาหารน่ากิน สัดส่วน 9:16 vertical.\n"
-    "ทุกข้อความภาษาไทยเป็นธรรมชาติ เหมือนคนรีวิวจริง ไม่แข็ง ไม่เป็นโฆษณาขายของจ๋า."
+    "คุณคือ short-form content creator ระดับโลก สาย food/affiliate ที่ทำรีลไทยปังจนคนดูจบแล้วกดสั่ง.\n"
+    "เป้าหมาย: คนหยุดนิ้วใน 1 วิแรก → ดูจนจบ → กดลิงก์.\n\n"
+    "หลักการที่ต้องใช้ทุกครั้ง:\n"
+    "• HOOK (วิแรก) = ตัวตัดสิน ใช้สูตร: คำถามสะกิด / ตัวเลขช็อก / ความขัดแย้ง ('ราคานี้ได้ไง?') / "
+    "คำสั่งห้าม ('อย่าเพิ่งเลื่อนผ่าน'). ห้ามเปิดด้วยชื่อร้านหรือคำเฝือ.\n"
+    "• video_title = ชื่อคลิป YouTube/TikTok สไตล์อินฟลูเอนเซอร์อาหารไทยให้ปังจนคนกดดู: "
+    "ขึ้นด้วยตัวเลข/ราคา/อารมณ์ความคุ้ม + ชื่อเมนูเด่นชัดเจน + อีโมจิ 1-2 ตัว, "
+    "ยาว 30-55 ตัวอักษร, สร้าง curiosity ('...จริงดิ?', 'ต้องลอง', 'บอกต่อ', 'เจ้าเด็ด'), "
+    "ห้ามยัด hashtag ยาว (ระบบเติม #Shorts ให้เอง). "
+    "ตัวอย่างโทน: '40 บาทอิ่มจุก! ก๋วยเตี๋ยวเรือเจ้านี้ต้องลอง 🔥' / "
+    "'บอกเลยว่าคุ้ม 😋 12 หม้อ 75 บาท ที่ต้องสั่ง'.\n"
+    "• voiceover_script = บทพูดรีล 10-15 วิ เขียนแบบ 'พูด' ไม่ใช่ 'อ่าน' — ประโยคสั้นๆ เป็นจังหวะต่อเนื่อง: "
+    "[hook แรง] → [จุดขาย 1-2 อย่างที่เจาะจง เห็นภาพ ได้กลิ่น/รส] → [CTA ชวนกด]. "
+    "เหมือนคุยกับเพื่อน มีพลัง ไม่ขายของจ๋า. **บทนี้จะกลายเป็นซับไตเติลเด้งตามเสียง ทุกวลีต้องโดน**.\n"
+    "• เจาะจง ชนะ กว้างๆ เสมอ: 'เส้นนุ่ม น้ำซุปเคี่ยว 8 ชม.' > 'อร่อยมาก'.\n"
+    "• A vs B ต้องคนละมุมจริง: A = สายคุ้ม/ดีล/ตัวเลข, B = สายฟิน/ดราม่าหิว/ASMR. ห้ามคล้ายกัน.\n"
+    "• โทนต่อ platform: FB=อบอุ่นแชร์ได้, IG=ฮิปมินิมอล, YouTube=เล่าเรื่องปากต่อปาก.\n"
+    "• caption สั้น มี emoji พอดี เว้นบรรทัด ปิดด้วย CTA · first_comment ใส่ {LINK} · hashtags 4-6 อัน.\n"
+    "• image_prompt/video_prompt = อังกฤษ อาหารโคลสอัพน่ากินสุด มีไอ/ซอสยืด/แสงสวย 9:16 vertical.\n"
+    "ภาษาไทยธรรมชาติเหมือนคนรีวิวจริง."
 )
 
 
@@ -107,6 +115,7 @@ def _mock(store: dict) -> dict:
         variants.append({
             "label": "A", "platform": p,
             "hook": f"{dish}ร้านนี้ {store.get('rating')}⭐ แต่ราคาเท่านี้เอง?! 🤯",
+            "video_title": f"คุ้มเกินราคา! {dish}ย่าน{area} {store.get('rating')}⭐ ต้องลอง 🔥",
             "caption": f"{store['name']} {dish}เด็ดย่าน{area}\nจาก {store.get('review_count')} รีวิวตัวจริง\nคุ้มแบบนี้รีบสั่งเลย 👇",
             "hashtags": ["#กินอะไรดี", f"#{area.replace(' ','')}", "#ShopeeFood", "#ของกินคุ้ม", "#รีวิวร้านอร่อย"],
             "cta": "แตะลิงก์คอมเมนต์แรกสั่งเลย ก่อนโปรหมด!",
@@ -118,6 +127,7 @@ def _mock(store: dict) -> dict:
         variants.append({
             "label": "B", "platform": p,
             "hook": f"เตือนแล้วนะ… {dish}ร้านนี้กินคำแรกแล้วหยุดไม่ได้ 😋",
+            "video_title": f"กินคำแรกแล้วหยุดไม่ได้ 😋 {dish}เจ้าเด็ดย่าน{area}",
             "caption": f"สายกินห้ามพลาด 🚨\n{dish} {store['name']} ฟินทุกคำ\nนุ่ม หอม จัดเต็ม ส่งไวถึงบ้าน 🛵",
             "hashtags": [f"#ของกิน{area.replace(' ','')}", "#คาเฟ่อุดร", "#ShopeeFood", "#กินจุก", "#ฟินเวอร์"],
             "cta": "สั่งเลยก่อนหิวกว่านี้ ลิงก์คอมเมนต์แรก!",
@@ -166,6 +176,7 @@ _JSON_SKELETON = (
     '"best_platform": "facebook|instagram|youtube", "hook_angle": "..."},\n'
     '  "variants": [   // ต้องมี 6 ชิ้น = label A และ B ต่อทุก platform (facebook, instagram, youtube)\n'
     '    {"label": "A|B", "platform": "facebook|instagram|youtube", "hook": "...", '
+    '"video_title": "ชื่อคลิปไวรัลสไตล์อินฟลูอาหาร 30-55 ตัวอักษร มีตัวเลข+เมนู+อีโมจิ", '
     '"caption": "...", "hashtags": ["#..."], "cta": "...", '
     '"first_comment": "... {LINK} ...", "voiceover_script": "...", '
     '"image_prompt": "english, 9:16 vertical", "video_prompt": "english, 9:16 vertical"}\n'

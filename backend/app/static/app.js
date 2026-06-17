@@ -43,6 +43,18 @@ $("#btn-opt").onclick = async () => {
   const r = await api("/auto-optimize", { method: "POST" });
   toast(`Auto-optimize: หยุด ${r.actions.length} ร้าน CTR ต่ำ`); loadAll();
 };
+$("#btn-preflight").onclick = async () => {
+  const p = await api("/post/preflight");
+  const row = (name, x) => `${x.live ? "🟢" : "🔴"} ${name}: ${x.detail}`;
+  const lines = [
+    `🚦 ${p.summary}`, "",
+    row("Facebook", p.facebook),
+    row("Instagram", p.instagram),
+    row("YouTube", p.youtube),
+    "", `โหมดโพสต์: ${p.posting_mode} · หน่วงเวลา: ${p.post_delay ? "เปิด" : "ปิด"}`,
+  ];
+  alert(lines.join("\n"));
+};
 
 // ---------------- banner (real vs mock)
 async function loadBanner() {

@@ -56,11 +56,35 @@
 - [x] แก้บั๊ก `setup_github.ps1` (`ErrorActionPreference=Continue`)
 - note: เป็น **สินค้า Shopee** (ไม่ใช่ร้าน Shopee Food เดลิเวอรี่ — ไม่มี actor) · เปลี่ยน `SHOPEE_KEYWORDS` ใน .env เลือก niche ได้
 
-## 🔜 Sprint 3 — โพสต์จริง (Meta/YouTube API)
-- [ ] Meta App + permission (pages_manage_posts, instagram_content_publish) + App Review
-- [ ] FB Reels / IG Reels publish ผ่าน Graph API (รองรับวีดีโอ)
-- [ ] YouTube OAuth refresh flow + resumable upload (Shorts)
-- [ ] random delay 15–45 นาที + กระจายเวลาโพสต์ตามตาราง Claude
+## ✅ Sprint 2.7 — สมองวีดีโอระดับโลก (เสร็จล่าสุด)
+> แก้ปัญหา "คลิปน่าเบื่อ" → คอนเทนต์ครีเอเตอร์ระดับโลก
+- [x] **ซับไตเติลเด้งตามเสียง (TikTok-style)** — แยกพากย์ทีละบรรทัด (edge-tts) → วัดเวลาจริง (ffprobe) → สร้าง ASS ซิงค์ + แอนิเมชัน pop → burn เข้าวีดีโอ (ไทยไม่มี word-boundary เลยใช้วิธี per-phrase)
+- [x] **อัปเกรด prompt สคริปต์** — voiceover เป็น spoken-word (hook สะกิด → จุดขายเจาะจง → CTA), ภาพมีไอ/แสงสวย
+- [x] เอา hook box เดิมออกจาก montage (เหลือซับเด้งสะอาดๆ) + แก้ ffmpeg ass filter (cwd=media เลี่ยง C:)
+- [x] ทดสอบจริง: "เฮ้ย! ก๋วยเตี๋ยวเรือ 40 บาทจริงดิ?!" + ภาพก๋วยเตี๋ยวมีไอ + ซับขาวเด้ง ✅ (ดูเฟรมยืนยันแล้ว)
+
+## 🟢 Sprint 3 — โพสต์จริง (โค้ด+เครื่องมือพร้อม เหลือ user ใส่ credential)
+- [x] **FB Page โพสต์จริง** — อัปโหลดไฟล์ตรง multipart (วีดีโอ→/videos, ภาพ→/photos) ไม่ต้อง public URL
+- [x] **IG Reels** — container (media_type=REELS) + poll status (FINISHED/ERROR/timeout) + media_publish
+- [x] **YouTube Shorts** — OAuth refresh → resumable upload (videos.insert) + #Shorts
+- [x] **random delay** ระหว่างโพสต์ (`ENABLE_POST_DELAY`) สุ่ม 15-45 นาที กัน spam
+- [x] **error handling แน่นขึ้น** — `_err()` ดึงข้อความ Graph API จริง (ไม่ KeyError) + IG บอกสถานะ container ชัด
+- [x] **Preflight** — `GET /api/post/preflight` ยิง API จริงเช็คความพร้อมต่อ platform + ปุ่ม **🚦 เช็คพร้อมโพสต์** บน dashboard
+- [x] **public URL ฟรีสำหรับ IG** — `scripts/start_tunnel.ps1` (cloudflared quick tunnel, http2, เขียน PUBLIC_BASE_URL ลง .env เอง) — **ทดสอบจริงแล้ว /media เข้าถึง public ได้ HTTP 200**
+- [x] **YouTube OAuth helper** — `scripts/youtube_oauth.py` (loopback flow ขอ refresh_token + เขียน .env)
+- [x] **เช็คลิสต์ go-live** — `SETUP_SPRINT3.md` (ทำเอง FB/IG/YouTube ทีละขั้น)
+- [ ] รอ user: Meta App + permission (pages_manage_posts, instagram_content_publish) + **App Review** (โปรดักชัน)
+- [ ] รอ user: รัน `scripts/youtube_oauth.py` (มี Google Cloud OAuth Desktop client)
+
+## ✅ Sprint 3.5 — Video Review Studio (รีวิวอาหารจริง ไม่ใช่สไลด์ — ฟรีล้วน)
+> แก้ "คลิปเหมือนสไลด์น่าเบื่อ" → คลิปรีวิวในร้านจริง มี motion + คน + เสียงบรรยากาศ
+- [x] **AI persona พูดได้ (Wav2Lip lip-sync, CPU, ฟรี)** — `engines/talking_head.py` (synthesize/overlay_pip วงกลม TikTok/add_persona_pip) + `scripts/setup_persona.ps1` (โหลดโมเดล+แพตช์ torch2.6/librosa). หน้า persona จาก Gemini: `influencer.png` (หนุ่ม PiP) + `chef.png` (ลุงพ่อครัวในร้าน)
+- [x] **โหมดรีวิวในร้าน** — พ่อครัวพูดเต็มจอเปิด (blurred-fill 9:16) → ตัดเข้าแอคชั่น + พ่อครัว PiP วงกลม → ปิดชวน (`scripts/_chef_demo.py`)
+- [x] **stock video จริง (Pexels)** — `engines/stock_video.py` + `build_queries` map เมนู→คิวรีเฉพาะ (เลี่ยง generic หลุดหัวข้อ/ราเมง). ⚠️ Pexels ไม่มีก๋วยเตี๋ยวเรือจริง → ได้แค่ noodle ใกล้เคียง (อยากเป๊ะต้อง Veo/ถ่ายเอง)
+- [x] **เสียงบรรยากาศร้าน (Freesound)** — `engines/stock_sfx.py` (เสียง chatter ในร้านยาวต่อเนื่อง ไม่วนลูป + re-encode กันไฟล์เสีย + retry). แก้บั๊กเสียงประตู 1วิวนรัว
+- [x] **`video_ffmpeg.py`:** เกรดสีอาหาร+vignette · xfade + ความเร็วแปรผัน (beat) · `build_review_reel` (เสียงพากย์ก่อน→ตัดภาพพอดี ไม่เหลือช่องว่าง + cap 22วิ) · `_video_clip` footage→9:16 · แยก `_mux_audio` (3-stream amix + retry)
+- [x] `media_gemini`: `generate_food_broll` (หลายมุม) + `download_images` (รูป Shopee จริง)
+- [ ] ค้าง: เก็บเป็น engine ถาวร `build_restaurant_reel` + wire ปุ่ม dashboard · ตัดสินใจ Veo สำหรับ footage เป๊ะ
 
 ## 🔜 Sprint 4 — Phone Farm จริง (6 เครื่อง)
 - [ ] ผูก uiautomator2 / Appium ต่อแอป (FB/IG/YouTube) — แตะปุ่ม+พิมพ์แคปชั่นจริง

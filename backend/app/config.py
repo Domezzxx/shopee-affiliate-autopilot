@@ -20,17 +20,29 @@ class Settings(BaseSettings):
     video_mode: str = "image"
     video_seconds: int = 6
     ffmpeg_path: str = ""            # เว้นว่าง = หาให้อัตโนมัติ
+    reel_scene_seconds: float = 2.0  # ความยาวต่อช็อตในคลิปรวม (สั้น = ตัดเร็วมีจังหวะ)
+    reel_cta_seconds: float = 2.6    # ฉากปิด CTA
+    reel_max_seconds: float = 22.0   # ความยาวรีลสูงสุด (เกินนี้ตัด — กันยาวจนคนปัดหนี)
+
+    # Stock video — footage อาหารจริง (เคลื่อนไหว) ผสมในคลิป ให้ดูเป็นรีวิวจริง
+    pexels_api_key: str = ""          # ฟรี: https://www.pexels.com/api/ (ภาพ+วีดีโอ)
+    stock_video: bool = True          # ผสม footage จริงถ้ามี key
+    freesound_api_key: str = ""       # ฟรี: https://freesound.org/apiv2/apply/ (เสียง ASMR ซด/ซิซเซิล)
 
     # Audio — เสียงพากย์ไทย (edge-tts ฟรี) + เพลงประกอบ
     enable_voiceover: bool = True
     tts_voice: str = "th-TH-PremwadeeNeural"   # หรือ th-TH-NiwatNeural (เสียงผู้ชาย)
     enable_music: bool = True
     music_volume: float = 0.16                 # ระดับเพลงคลอใต้เสียงพากย์
+    asmr_volume: float = 0.13                  # เสียงบรรยากาศร้าน (chatter เบาๆ) ใต้เสียงพากย์
+    stock_video_ratio: int = 2                 # อัตราส่วน วีดีโอจริง:ภาพ (2 = วีดีโอจริงเป็นพระเอก)
 
     # Meta (FB + IG)
     meta_page_id: str = ""
     meta_ig_user_id: str = ""
     meta_access_token: str = ""
+    public_base_url: str = ""        # สำหรับ IG (ต้องโฮสต์สื่อ public เช่น ngrok/cloud)
+    enable_post_delay: bool = False  # โพสต์จริง: สุ่มหน่วงเวลาระหว่างโพสต์ (กัน spam)
 
     # YouTube
     youtube_client_id: str = ""

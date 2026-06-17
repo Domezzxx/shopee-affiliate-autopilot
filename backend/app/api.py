@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from .config import settings
+from .connectors import social
 from .db import ContentJob, Metric, Post, Store, Variant, get_session, jloads
 from .services import pipeline
 
@@ -183,7 +184,7 @@ def get_content(store_id: int):
                       "schedule": jloads(j.schedule_json, []), "cost_baht": j.cost_baht,
                       "model": j.model_used} for j in jobs],
             "variants": [{"id": v.id, "label": v.label, "platform": v.platform,
-                          "hook": v.hook, "caption": v.caption, "cta": v.cta,
+                          "hook": v.hook, "video_title": v.video_title, "caption": v.caption, "cta": v.cta,
                           "first_comment": (v.first_comment or "").replace("{LINK}", link),
                           "hashtags": jloads(v.hashtags_json, []),
                           "media_type": v.media_type,
@@ -217,7 +218,9 @@ def make_reel(store_id: int, label: str = "A", voice: str = "female"):
                 narration.append(v.voiceover_script or v.hook)
         if not scenes:
             raise HTTPException(400, "ไม่มีภาพต้นฉบับ — รันร้านนี้ใหม่ก่อน (โหมด ffmpeg จะเก็บภาพไว้)")
-        reel = video_ffmpeg.build_reel(scenes, narration=" ".join(narration), voice=voice_name)
+        cta_lines = [store.name[:24], "สั่งเลยตอนนี้!", "ลิงก์ในคอมเมนต์แรก"]
+        reel = video_ffmpeg.build_reel(scenes, narration=" ".join(narration),
+                                       voice=voice_name, cta_lines=cta_lines)
         if not reel:
             raise HTTPException(500, "สร้างคลิปไม่สำเร็จ")
         store.reel_url = "/media/" + os.path.basename(reel)
@@ -285,6 +288,13 @@ def abtest(store_id: int):
 @router.post("/auto-optimize")
 def run_optimize():
     return pipeline.auto_optimize()
+
+
+# ----------------------------------------------------------------- preflight (Sprint 3)
+@router.get("/post/preflight")
+def post_preflight():
+    """เช็คความพร้อมโพสต์จริงต่อ platform (ยิง API จริงยืนยัน token/สิทธิ์) — ก่อน go-live."""
+    return social.preflight()
 
 
 # ----------------------------------------------------------------- keys / status

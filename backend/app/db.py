@@ -54,6 +54,7 @@ class Variant(SQLModel, table=True):
     label: str                       # "A" | "B"
     platform: str                    # facebook | instagram | youtube
     hook: str = ""
+    video_title: str = ""            # ชื่อคลิปไวรัลสไตล์อินฟลูอาหาร (YouTube/TikTok)
     caption: str = ""
     hashtags_json: str = "[]"
     cta: str = ""
@@ -101,7 +102,8 @@ class Metric(SQLModel, table=True):
 def _migrate() -> None:
     """เพิ่มคอลัมน์ใหม่ให้ DB เดิมที่มีข้อมูลอยู่แล้ว (SQLite ไม่ migrate ให้อัตโนมัติ)."""
     new_cols = {
-        "variant": [("first_comment", "TEXT DEFAULT ''"), ("image_path", "TEXT DEFAULT ''")],
+        "variant": [("first_comment", "TEXT DEFAULT ''"), ("image_path", "TEXT DEFAULT ''"),
+                    ("video_title", "TEXT DEFAULT ''")],
         "post": [("comment_id", "TEXT DEFAULT ''"), ("comment_status", "TEXT DEFAULT ''")],
         "store": [("reel_url", "TEXT DEFAULT ''")],
     }

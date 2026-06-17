@@ -15,6 +15,13 @@ venv/
 # n8n local state
 n8n/.n8n/
 
+# cloudflared (binary โหลดเอง + log) สำหรับ public URL ของ IG
+scripts/cloudflared.exe
+scripts/*.log
+
+# Wav2Lip (clone + โมเดล ~500MB) สำหรับ AI persona lip-sync — โหลดเองด้วย scripts/setup_persona.ps1
+tools/
+
 # editor / os
 .idea/
 .vscode/
