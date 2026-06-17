@@ -67,9 +67,14 @@ def generate_video_flow(prompt: str) -> str:
                 time.sleep(5)  # Wait for project editor to load
                 break
         
-        # 4) Locate prompt input (Slate editor [role='textbox'])
-        print(f"[flow-auto] Locating prompt input using selector: {settings.flow_selector_input}")
-        input_locator = page.locator(settings.flow_selector_input).first
+        # 4) Locate prompt input — ต้องเป็น textbox ที่ "มองเห็นจริง" (Flow มี textbox ซ่อน x=0
+        #    ถ้าใช้ .first/.last จะโดนตัวซ่อน → พิมพ์ไม่ลง → ปุ่ม Generate ไม่ enable)
+        vis_idx = page.evaluate("""() => {
+          const tbs=[...document.querySelectorAll("[role='textbox'],textarea")];
+          for(let i=0;i<tbs.length;i++){const r=tbs[i].getBoundingClientRect(); if(r.width>10&&r.height>10) return i;}
+          return 0;
+        }""")
+        input_locator = page.locator("[role='textbox'], textarea").nth(vis_idx)
         input_locator.wait_for(state="visible", timeout=15000)
 
         # Focus + clear
@@ -91,20 +96,22 @@ def generate_video_flow(prompt: str) -> str:
         existing_names = {_media_name(s) for s in existing_srcs if _media_name(s)}
         print(f"[flow-auto] วีดีโอเดิมในโปรเจกต์: {len(existing_names)} ตัว")
 
-        # 5) ปุ่ม Generate จริง = ปุ่มที่มีข้อความ "สร้าง" (icon add_2) ในแถบ prompt
-        #    (selector เดิม .first จับผิดตัว → ใช้ get_by_role filter ที่ทดสอบแล้วว่า submit ได้จริง)
-        gen_btn = page.get_by_role("button").filter(has_text="สร้าง").first
-        try:
-            gen_btn.wait_for(state="visible", timeout=8000)
-        except Exception:
-            gen_btn = page.locator(settings.flow_selector_generate).first   # fallback
-        for _ in range(10):   # รอจน enabled
-            try:
-                if gen_btn.evaluate("el => el.getAttribute('aria-disabled')") != "true":
-                    break
-            except Exception:
+        # 5) ปุ่ม Generate = ปุ่ม "สร้าง" ที่ visible + enabled (พิมพ์แล้วปุ่มจะ enable)
+        btns = page.get_by_role("button").filter(has_text="สร้าง")
+        gen_btn = None
+        for _ in range(12):   # รอจนมีปุ่มที่ enabled (หลังพิมพ์)
+            for i in range(btns.count()):
+                btn = btns.nth(i)
+                try:
+                    if btn.is_visible() and btn.get_attribute("aria-disabled") != "true":
+                        gen_btn = btn; break
+                except Exception:
+                    continue
+            if gen_btn:
                 break
             time.sleep(0.5)
+        if not gen_btn:
+            raise RuntimeError("ไม่พบปุ่ม สร้าง ที่ enabled (prompt อาจไม่ติดในช่อง)")
         print("[flow-auto] คลิกปุ่ม สร้าง (Generate)...")
         gen_btn.click()
         time.sleep(2)
