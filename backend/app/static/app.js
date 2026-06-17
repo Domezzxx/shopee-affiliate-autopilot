@@ -100,16 +100,29 @@ function healthTip(h) {
     `Meta: ${yn(h.meta)} · YouTube: ${yn(h.youtube)} · โหมด: ${h.posting_mode}`,
   ].join("\n");
 }
+let autopilotOn = false;
 async function loadSystem() {
   try {
     const s = await api("/system");
     systemEnabled = s.enabled;
+    autopilotOn = s.health?.autopilot;
     const b = $("#btn-system");
     b.textContent = s.enabled ? "🟢 ระบบเปิด" : "🔴 ระบบปิด";
     b.className = "sys " + (s.enabled ? "on" : "off");
     b.title = healthTip(s.health);
+    const a = $("#btn-autopilot");
+    a.textContent = autopilotOn ? "🤖 Auto: เปิด" : "🤖 Auto: ปิด";
+    a.className = "sys " + (autopilotOn ? "on" : "off");
+    a.title = "Auto-Pilot: ประมวลผลร้านใหม่เองตามรอบ" + (s.health?.flow_blocked ? " · ⚠️ Flow เครดิตหมด (พักอยู่)" : "");
   } catch (e) {}
 }
+$("#btn-autopilot").onclick = async () => {
+  try {
+    const r = await api(`/system/autopilot?enable=${!autopilotOn}`, { method: "POST" });
+    toast(r.autopilot ? "🤖 เปิด Auto-Pilot — ระบบจะประมวลผลร้านใหม่เองตามรอบ" : "🤖 ปิด Auto-Pilot");
+    loadSystem();
+  } catch (e) { toast(e.message, true); }
+};
 $("#btn-system").onclick = async () => {
   const next = !systemEnabled;
   if (!next && !confirm("ปิดระบบ? บอทจะหยุดรัน/โพสต์อัตโนมัติ\n(เปิดใหม่ทำงานต่อได้ปกติ)")) return;
@@ -370,10 +383,30 @@ function renderFlow() {
     `<div class="flowstep"><b>${s[0]}</b><div class="muted" style="margin-top:4px">${s[1]}</div></div>`).join("");
 }
 
+// ---------------- report (P3)
+async function renderReport() {
+  const r = await api("/report/daily").catch(() => null);
+  if (!r) { $("#tab-report").innerHTML = '<p class="muted">โหลดรายงานไม่ได้</p>'; return; }
+  const wins = (r.ab_winners || []).map((w) =>
+    `<tr><td>${esc(w.store)}</td><td>${w.platform}</td><td><b class="ok">${w.winner}</b></td><td>+${(w.lift * 100).toFixed(2)}%</td></tr>`).join("")
+    || '<tr><td colspan="4" class="muted">ยังไม่มีผู้ชนะ A/B (เก็บ impression ไม่พอ)</td></tr>';
+  $("#tab-report").innerHTML = `
+    <div class="kpis" style="padding:0 0 14px">
+      <div class="kpi"><div class="v">${r.stores_active}</div><div class="l">ร้าน active</div><div class="s bad">${r.stores_paused} หยุด</div></div>
+      <div class="kpi"><div class="v">${r.posts_ok}</div><div class="l">โพสต์สำเร็จ</div><div class="s bad">${r.posts_failed} ล้มเหลว</div></div>
+      <div class="kpi"><div class="v">${r.impressions.toLocaleString()}</div><div class="l">Impressions</div></div>
+      <div class="kpi"><div class="v">${(r.ctr * 100).toFixed(2)}%</div><div class="l">CTR</div></div>
+      <div class="kpi"><div class="v ok">฿${r.revenue_baht.toLocaleString()}</div><div class="l">รายได้ประเมิน</div></div>
+      <div class="kpi"><div class="v">฿${r.content_cost_baht}</div><div class="l">ต้นทุน AI</div></div>
+    </div>
+    <div class="card"><h4>🏆 ผู้ชนะ A/B ต่อร้าน</h4>
+      <table class="rep"><tr><th>ร้าน</th><th>ช่องทาง</th><th>ผู้ชนะ</th><th>ดีกว่า</th></tr>${wins}</table></div>`;
+}
+
 // ---------------- driver
 function render(tab) {
   ({ stores: renderStores, content: renderContent, posts: renderPosts,
-     platform: renderPlatform, flow: renderFlow }[tab] || (() => {}))();
+     platform: renderPlatform, report: renderReport, flow: renderFlow }[tab] || (() => {}))();
 }
 async function loadAll() {
   await Promise.all([loadSystem().catch(() => {}), loadBanner().catch(() => {}), loadKpis().catch((e) => toast(e.message, true))]);

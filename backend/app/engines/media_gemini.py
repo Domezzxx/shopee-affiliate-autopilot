@@ -64,6 +64,15 @@ def generate_video(prompt: str) -> str:
     if not settings.enable_video:
         return _placeholder(prompt, "video")
     
+    # 0) ถ้า Flow ถูกพักอยู่ (เครดิตหมด) → ข้าม ไม่เสียเวลายิงซ้ำ
+    try:
+        from ..services import system_state
+        if system_state.flow_blocked():
+            print("[flow-auto] ข้าม Flow (เครดิตหมด พักอยู่) → ใช้ fallback")
+            return _placeholder(prompt, "video")
+    except Exception:
+        pass
+
     # 1) ลองรันด้วย Browser Automation (Flow) ก่อนเพื่อประหยัดเงินตามที่คุณกอล์ฟเลือก
     try:
         from .flow_automation import generate_video_flow

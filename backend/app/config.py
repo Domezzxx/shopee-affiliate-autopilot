@@ -82,6 +82,14 @@ class Settings(BaseSettings):
     post_delay_max: int = 45
     auto_optimize_interval_min: int = 360
 
+    # Auto-Pilot — วงจรอัตโนมัติ (scrape→generate→post) ทำเองตามรอบ (Sprint 6 P2)
+    autopilot_enabled: bool = False       # เปิด = ระบบประมวลผลร้านใหม่เองตามรอบ
+    autopilot_interval_min: int = 120     # รอบ auto-pilot (นาที)
+    autopilot_batch: int = 2              # จำนวนร้านต่อรอบ (กัน rate limit + เครดิต)
+
+    # Flow quota guard — เมื่อเครดิต Flow หมด พักไม่ยิงซ้ำ (กันเสียเวลา/เครดิต)
+    flow_block_hours: int = 6             # บล็อก Flow กี่ชม.หลังเจอเครดิตหมด
+
     data_dir: str = "/app/data"
 
     @property

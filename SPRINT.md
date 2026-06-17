@@ -97,10 +97,10 @@
 - [x] **P1 เก็บโหมดรีวิวในร้านเป็น engine ถาวร** `talking_head.build_restaurant_reel` (พ่อครัวเต็มจอ→แอคชั่น+PiP+ASMR, มี progress) + `pipeline.build_restaurant` (รวมสื่อ: Flow video ถ้ามี ไม่งั้น stock) + endpoint `/stores/{id}/restaurant-reel` + ปุ่ม dashboard "🍜 รีวิวในร้าน" · ทดสอบจริงผ่าน (reel_dd571b81)
 - [x] **P1 รวม Flow video เข้า reel** — `build_restaurant` หยิบ `video_flow_*.mp4` ของร้านมาเป็น hero footage ก่อน (ไม่พอเติม stock) · ⚠️ Flow generate ยังไม่นิ่ง (UI ซับซ้อน) แต่โครงพร้อมรับเมื่อ Flow เสถียร
 - [x] **Flow: หาปุ่ม Generate จริง + พิมพ์เข้า Slate** (commit 5fc0381) — generate ได้บ้างแต่ไม่นิ่ง (chat panel แยก)
-- [ ] **P2 Harden Flow automation** — ระบุช่อง prompt หลัก (ไม่ใช่ .first ที่โดน chat) + คิว 1 งาน/แท็บ + retry + health-check
-- [ ] **P2 วงจรอัตโนมัติเต็ม** — n8n/scheduler รายวัน: scrape → generate(+Flow video) → คิวอนุมัติ → โพสต์ phone farm → เก็บผล
-- [ ] **P3 metrics จริง + A/B auto-decide** — ดึงผลจาก platform/phone farm → ตัดสิน A/B → ใช้ variant ผู้ชนะเป็น base
-- [ ] **P3 รายงานสรุป/วัน** (Telegram) + กราฟ dashboard + รองรับหลายคีย์เวิร์ด/จังหวัด
+- [x] **P2 Harden Flow** — เฉลย: Flow ทำงานได้! ที่ fail = เครดิตหมด · submit ด้วย Enter + จับช่องที่มองเห็น + **quota guard** (เจอเครดิตหมด→พัก Flow `flow_block_hours` ชม. ไม่ยิงซ้ำ, media_gemini ข้ามไป fallback)
+- [x] **P2 Auto-Pilot scheduler** — `_autopilot_loop` ใน main.py (ประมวลผลร้าน new เองตามรอบ `autopilot_interval_min` ทีละ `autopilot_batch`) + toggle `/system/autopilot` + ปุ่ม 🤖 Auto บน dashboard (gate ด้วยระบบเปิด)
+- [x] **P3 รายงานสรุป + A/B winner** — `/api/report/daily` (ร้าน/โพสต์/CTR/รายได้/ต้นทุน + ผู้ชนะ A/B ต่อร้าน) + แท็บ 📊 รายงาน บน dashboard
+- [ ] (เลื่อน) ใช้ variant ผู้ชนะเป็น base รอบถัดไป (ตอนนี้ตรวจ+โชว์ winner แล้ว) · รายงานเข้า Telegram
 
 ## ✅ เสร็จแล้วระหว่างทาง (ย้ายจาก backlog)
 - [x] ระบบ approve คอนเทนต์ก่อนโพสต์ (human-in-the-loop) — Store.requires_approval + pending_approval + ปุ่มอนุมัติ
