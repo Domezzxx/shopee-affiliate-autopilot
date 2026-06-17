@@ -404,8 +404,15 @@ def _concat_xfade(ff: str, clips: list[str], durs: list[float], silent: str,
 
 def build_reel(scenes: list[tuple[str, str]], seconds_each: float | None = None,
                transition: float = 0.3, narration: str = "", voice: str | None = None,
-               cta_lines: list[str] | None = None) -> str | None:
-    """หลายภาพ -> คลิปตัดเร็วมีจังหวะ (zoom punch + ความเร็วแปรผัน + xfade) + ฉากปิด CTA + ซับเด้ง + เสียง + เพลง."""
+               cta_lines: list[str] | None = None, progress_cb=None) -> str | None:
+    """หลายภาพ -> คลิปตัดเร็วมีจังหวะ (zoom punch + ความเร็วแปรผัน + xfade) + ฉากปิด CTA + ซับเด้ง + เสียง + เพลง.
+    progress_cb(step:str, pct:int) = callback รายงานความคืบหน้า (optional)."""
+    def _cb(step, pct):
+        if progress_cb:
+            try:
+                progress_cb(step, pct)
+            except Exception:
+                pass
     ff = find_ffmpeg()
     if not ff or not scenes:
         return None
@@ -418,6 +425,7 @@ def build_reel(scenes: list[tuple[str, str]], seconds_each: float | None = None,
     beat = [0.72, 1.18, 0.82, 1.05]            # ตัวคูณความยาวต่อช็อต = จังหวะ
     clips, durs = [], []
     for i in range(n):
+        _cb(f"🎞️ เรนเดอร์ฉาก {i + 1}/{n}", 12 + int(i / n * 44))
         si = round(sec * beat[i % len(beat)], 2)
         c = _scene_clip(ff, imgs[i % len(imgs)], "", si, i, punch=True)
         if c:
@@ -432,6 +440,7 @@ def build_reel(scenes: list[tuple[str, str]], seconds_each: float | None = None,
     if not clips:
         return None
 
+    _cb("🎬 ต่อคลิป + ทรานซิชัน", 60)
     silent = os.path.join(settings.media_dir, f"_silent_{uuid.uuid4().hex[:8]}.mp4")
     if len(clips) == 1:
         shutil.move(clips[0], silent)
@@ -446,6 +455,7 @@ def build_reel(scenes: list[tuple[str, str]], seconds_each: float | None = None,
             return None
 
     # ใส่เสียงพากย์ + เพลง
+    _cb("🎙️ ทำเสียงพากย์ + ซับ + เพลง", 75)
     out = os.path.join(settings.media_dir, f"reel_{uuid.uuid4().hex[:8]}.mp4")
     final = add_audio(ff, silent, narration, out, voice)
     if final:

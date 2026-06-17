@@ -14,6 +14,37 @@ const toast = (msg, err = false) => {
 
 let showAddForm = false;
 
+// ---------------- progress การสร้างคลิป AI
+let progressTimer = null, progressRefreshed = false;
+function renderProgress(jobs) {
+  const box = $("#progress");
+  if (!jobs || !jobs.length) { box.className = "hidden"; box.innerHTML = ""; return; }
+  box.className = "";
+  box.innerHTML = `<div class="phead"><span class="pspin"></span> กำลังสร้างคลิป AI · ${jobs.length} ร้าน</div>` +
+    jobs.map((j) => `
+    <div class="pjob ${j.status}">
+      <div class="ptop">
+        <span class="pname">${esc(j.name)}</span>
+        <span class="pstep">${esc(j.step)}${j.detail ? " · " + esc(j.detail) : ""} · ${j.pct}%</span>
+      </div>
+      <div class="pbar"><div class="pfill" style="width:${j.pct}%"></div></div>
+    </div>`).join("");
+}
+async function pollProgress() {
+  let jobs = [];
+  try { jobs = (await api("/progress")).jobs || []; } catch (e) { return; }
+  renderProgress(jobs);
+  const active = jobs.some((j) => j.status === "running");
+  if (active) progressRefreshed = false;
+  else if (jobs.length && !progressRefreshed) { progressRefreshed = true; loadAll(); }  // เสร็จ → refresh 1 ครั้ง
+  if (!jobs.length && progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+}
+function startProgress() {
+  progressRefreshed = false;
+  if (!progressTimer) progressTimer = setInterval(pollProgress, 1200);
+  pollProgress();
+}
+
 // ---------------- tabs
 document.querySelectorAll(".tabs button").forEach((b) =>
   b.addEventListener("click", () => {
@@ -32,8 +63,8 @@ $("#btn-add").onclick = () => {
 };
 $("#btn-runall").onclick = async () => {
   const r = await api("/run-all", { method: "POST" });
-  toast(`เริ่มรัน ${r.count} ร้าน — Claude+Gemini กำลังทำงานเบื้องหลัง`);
-  setTimeout(loadAll, 4000);
+  toast(`เริ่มรัน ${r.count} ร้าน — ดูความคืบหน้าด้านบน`);
+  startProgress();
 };
 $("#btn-sim").onclick = async () => {
   const r = await api("/metrics/simulate", { method: "POST" });
@@ -150,7 +181,7 @@ async function submitAddStore() {
     toast(`เพิ่ม "${r.name}" แล้ว — กำลังรันร้านนี้`);
     await api(`/stores/${r.id}/run`, { method: "POST" });
     showAddForm = false;
-    setTimeout(loadAll, 4000);
+    loadAll(); startProgress();
   } catch (e) { toast(e.message, true); }
 }
 async function submitCsv(ev) {
@@ -165,16 +196,15 @@ async function submitCsv(ev) {
 }
 window.runStore = async (id) => {
   await api(`/stores/${id}/run`, { method: "POST" });
-  toast("เริ่มรันร้านนี้ — รอ Claude+Gemini สักครู่"); setTimeout(loadAll, 4000);
+  toast("เริ่มรันร้านนี้ — ดูความคืบหน้าด้านบน"); startProgress();
 };
 window.makeReel = async (id, label = "A") => {
   const voice = document.getElementById(`voice-sel-${id}`)?.value || "female";
   const vlabel = voice === "male" ? "เสียงผู้ชาย" : "เสียงผู้หญิง";
-  toast(`กำลังรวมคลิป ${label} (${vlabel})... (~20-40 วิ)`);
   try {
-    const r = await api(`/stores/${id}/reel?label=${label}&voice=${voice}`, { method: "POST" });
-    toast(`รวม ${r.scenes} ฉาก (${label} · ${vlabel}) เสร็จแล้ว!`);
-    render("content");
+    await api(`/stores/${id}/reel?label=${label}&voice=${voice}`, { method: "POST" });
+    toast(`เริ่มรวมคลิป ${label} (${vlabel}) — ดูความคืบหน้าด้านบน`);
+    startProgress();
   } catch (e) { toast(e.message, true); }
 };
 
@@ -279,4 +309,5 @@ async function loadAll() {
   render(active);
 }
 loadAll();
+startProgress();   // เผื่อมีงานสร้างคลิปค้างอยู่ตอนเปิด/รีเฟรชหน้า
 setInterval(loadKpis, 15000);

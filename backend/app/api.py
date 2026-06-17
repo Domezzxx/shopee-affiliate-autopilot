@@ -161,6 +161,12 @@ def _run_all_seq(ids: list[int]):
             print(f"[run-all] store {sid}: {e}")
 
 
+@router.get("/progress")
+def progress():
+    """ความคืบหน้าการสร้างคลิป AI ต่อร้าน (สำหรับ progress bar) — running/done/error."""
+    return {"jobs": pipeline.progress_list()}
+
+
 @router.post("/run-all")
 def run_all(background: BackgroundTasks, limit: int = 20):
     """ยิงครบวงทุกร้านสถานะ new (รันเรียงทีละร้านใน task เดียว กัน lock + rate limit)."""
@@ -198,34 +204,13 @@ VOICE_MAP = {"female": "th-TH-PremwadeeNeural", "male": "th-TH-NiwatNeural"}
 
 
 @router.post("/stores/{store_id}/reel")
-def make_reel(store_id: int, label: str = "A", voice: str = "female"):
-    """รวมภาพ A (หรือ B) หลายช็อตของร้าน → คลิปต่อเนื่อง + เสียงพากย์ (female/male) + เพลง."""
-    import os
-    from .engines import video_ffmpeg
-
+def make_reel(store_id: int, background: BackgroundTasks, label: str = "A", voice: str = "female"):
+    """รวมภาพ A/B → คลิป (ทำเบื้องหลัง + อัปเดต progress bar). ดูผลที่แท็บคอนเทนต์เมื่อเสร็จ."""
+    if not get_session().get(Store, store_id):
+        raise HTTPException(404, "store not found")
     voice_name = VOICE_MAP.get(voice, settings.tts_voice)
-    with get_session() as s:
-        store = s.get(Store, store_id)
-        if not store:
-            raise HTTPException(404, "store not found")
-        vs = s.exec(select(Variant).where(Variant.store_id == store_id, Variant.label == label)).all()
-        scenes, narration, seen = [], [], set()
-        for v in vs:
-            img = v.image_path or (v.media_path if v.media_type == "image" else "")
-            if img and os.path.exists(img) and img not in seen:
-                seen.add(img)
-                scenes.append((img, v.hook))
-                narration.append(v.voiceover_script or v.hook)
-        if not scenes:
-            raise HTTPException(400, "ไม่มีภาพต้นฉบับ — รันร้านนี้ใหม่ก่อน (โหมด ffmpeg จะเก็บภาพไว้)")
-        cta_lines = [store.name[:24], "สั่งเลยตอนนี้!", "ลิงก์ในคอมเมนต์แรก"]
-        reel = video_ffmpeg.build_reel(scenes, narration=" ".join(narration),
-                                       voice=voice_name, cta_lines=cta_lines)
-        if not reel:
-            raise HTTPException(500, "สร้างคลิปไม่สำเร็จ")
-        store.reel_url = "/media/" + os.path.basename(reel)
-        s.add(store); s.commit()
-        return {"reel_url": store.reel_url, "scenes": len(scenes)}
+    background.add_task(pipeline.build_montage, store_id, label, voice_name)
+    return {"status": "started", "store_id": store_id, "label": label}
 
 
 # ----------------------------------------------------------------- posts
