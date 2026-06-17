@@ -83,63 +83,31 @@ def generate_video_flow(prompt: str) -> str:
         page.keyboard.insert_text(prompt)
         time.sleep(0.8)
 
-        # ตรวจว่าพิมพ์เข้าจริง — ถ้าช่องว่าง ลองวิธีสำรอง (fill / type) ก่อนยอมแพ้
-        def _entered() -> str:
-            try:
-                return (input_locator.inner_text(timeout=2000) or "").strip()
-            except Exception:
-                return ""
-        if not _entered():
-            print("[flow-auto] insertText ไม่เข้า → ลอง fill/type สำรอง")
-            try:
-                input_locator.click()
-                input_locator.fill(prompt)
-            except Exception:
-                page.keyboard.type(prompt, delay=15)
-            time.sleep(0.8)
-        if not _entered():
-            raise RuntimeError("พิมพ์ prompt เข้า Google Flow ไม่ได้ (ช่องว่าง) — selector input อาจเปลี่ยน")
-        print(f"[flow-auto] ✓ prompt ในช่องแล้ว: {_entered()[:50]}")
+        # หมายเหตุ: inner_text ของ editor นี้อ่านไม่นิ่ง → ไม่เช็คเข้ม ใช้ "มีวีดีโอใหม่" เป็นตัวยืนยันแทน
+        print(f"[flow-auto] พิมพ์ prompt แล้ว: {prompt[:50]}")
 
-        # เก็บรายการวีดีโอ "เดิม" ในโปรเจกต์ ก่อนกด Generate → จะได้รู้ว่าตัวไหนคือตัวใหม่
+        # เก็บรายการวีดีโอ "เดิม" ก่อนกด Generate → จะได้รู้ว่าตัวไหนใหม่
         existing_srcs = page.locator("video").evaluate_all("els => els.map(e => e.src).filter(Boolean)")
         existing_names = {_media_name(s) for s in existing_srcs if _media_name(s)}
         print(f"[flow-auto] วีดีโอเดิมในโปรเจกต์: {len(existing_names)} ตัว")
-        
-        # 5) Locate and click Generate button
-        print(f"[flow-auto] Locating generate button using selector: {settings.flow_selector_generate}")
-        gen_btn = page.locator(settings.flow_selector_generate).first
-        gen_btn.wait_for(state="visible", timeout=5000)
-        
-        # Wait until it is enabled (not aria-disabled="true")
-        print("[flow-auto] Waiting for generate button to be enabled...")
-        for _ in range(10):
-            aria_disabled = gen_btn.evaluate("el => el.getAttribute('aria-disabled')")
-            if aria_disabled != "true":
+
+        # 5) ปุ่ม Generate จริง = ปุ่มที่มีข้อความ "สร้าง" (icon add_2) ในแถบ prompt
+        #    (selector เดิม .first จับผิดตัว → ใช้ get_by_role filter ที่ทดสอบแล้วว่า submit ได้จริง)
+        gen_btn = page.get_by_role("button").filter(has_text="สร้าง").first
+        try:
+            gen_btn.wait_for(state="visible", timeout=8000)
+        except Exception:
+            gen_btn = page.locator(settings.flow_selector_generate).first   # fallback
+        for _ in range(10):   # รอจน enabled
+            try:
+                if gen_btn.evaluate("el => el.getAttribute('aria-disabled')") != "true":
+                    break
+            except Exception:
                 break
             time.sleep(0.5)
-            
-        print("[flow-auto] Clicking Generate button...")
-        try:
-            gen_btn.click()
-        except Exception as e:
-            print(f"[flow-auto] คลิกปุ่ม Generate ไม่ได้ ({str(e)[:50]})")
-        time.sleep(1.5)
-
-        # ตรวจว่า submit สำเร็จ (ช่อง prompt ควรเคลียร์) — ถ้ายังค้าง = ยังไม่ส่ง → กด Enter ในช่อง
-        if _entered():
-            print("[flow-auto] prompt ยังค้างในช่อง → ลอง submit ด้วย Enter")
-            try:
-                input_locator.click()
-                page.keyboard.press("Enter")
-            except Exception:
-                pass
-            time.sleep(1.5)
-        if _entered():
-            # prompt ยังค้าง = submit ไม่ทำงาน (ปุ่ม Generate ของ Flow เปลี่ยน/หาไม่เจอ)
-            # → fail เร็ว ไม่ค้าง 4 นาที + ไม่หยิบวีดีโอเก่ามาแทน (ให้ media_gemini fallback)
-            raise RuntimeError("Google Flow ไม่ submit (prompt ค้างในช่อง) — ปุ่ม Generate หาไม่เจอ/UI เปลี่ยน")
-        print("[flow-auto] ✓ submit สำเร็จ (ช่อง prompt ว่างแล้ว)")
+        print("[flow-auto] คลิกปุ่ม สร้าง (Generate)...")
+        gen_btn.click()
+        time.sleep(2)
 
         # 6) Wait for and click Approve button (อนุมัติ)
         # Google Flow presents the generated video in the sidebar and requires approval.
@@ -169,7 +137,7 @@ def generate_video_flow(prompt: str) -> str:
         # 7) รอวีดีโอ "ใหม่" (src ไม่ซ้ำของเดิม) — กันบั๊กหยิบวีดีโอเก่าตัวแรกมา
         print("[flow-auto] Waiting for NEW video to generate (up to ~6 นาที)...")
         video_url = ""
-        for i in range(120):   # ~4 นาที
+        for i in range(150):   # ~5 นาที (Veo generate 2-5 นาที) — เกินนี้ fallback
             try:
                 srcs = page.locator("video").evaluate_all("els => els.map(e => e.src).filter(Boolean)")
             except Exception as e:
