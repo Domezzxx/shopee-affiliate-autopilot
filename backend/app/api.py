@@ -14,7 +14,7 @@ from sqlmodel import select
 from .config import settings
 from .connectors import social
 from .db import ContentJob, Metric, Post, Store, Variant, get_session, jloads
-from .services import pipeline
+from .services import pipeline, system_state
 
 router = APIRouter(prefix="/api")
 
@@ -167,6 +167,8 @@ def list_stores(status: str | None = None):
 @router.post("/stores/{store_id}/run")
 def run_store(store_id: int, background: BackgroundTasks):
     """ครบวง 1 ร้าน (ทำเบื้องหลัง เพราะ Gemini ช้า)."""
+    if not system_state.is_enabled():
+        raise HTTPException(409, "ระบบปิดอยู่ — กดเปิดระบบก่อน")
     if not get_session().get(Store, store_id):
         raise HTTPException(404, "store not found")
     background.add_task(pipeline.run_full, store_id)
@@ -188,9 +190,25 @@ def progress():
     return {"jobs": pipeline.progress_list()}
 
 
+# ----------------------------------------------------------------- เปิด/ปิดระบบ (master switch)
+@router.get("/system")
+def system_status():
+    """สถานะระบบ — เปิด/ปิด + health (อะไรพร้อม/ไม่พร้อม)."""
+    return {"enabled": system_state.is_enabled(), "health": system_state.health()}
+
+
+@router.post("/system/toggle")
+def system_toggle(enable: bool):
+    """เปิด/ปิดระบบอัตโนมัติ (จำสถานะข้าม restart). ปิด = บอทไม่รัน/ไม่โพสต์เอง."""
+    st = system_state.set_enabled(enable)
+    return {"enabled": st["enabled"]}
+
+
 @router.post("/run-all")
 def run_all(background: BackgroundTasks, limit: int = 20):
     """ยิงครบวงทุกร้านสถานะ new (รันเรียงทีละร้านใน task เดียว กัน lock + rate limit)."""
+    if not system_state.is_enabled():
+        raise HTTPException(409, "ระบบปิดอยู่ — กดเปิดระบบก่อน")
     with get_session() as s:
         ids = [r.id for r in s.exec(
             select(Store).where(Store.status == "new").limit(limit)).all()]

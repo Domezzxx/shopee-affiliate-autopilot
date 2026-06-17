@@ -34,10 +34,13 @@ async def _startup():
 
 
 async def _auto_optimize_loop():
-    """รัน auto-optimize เป็นรอบ (ขั้น 5) — หยุดร้าน CTR ต่ำเอง."""
+    """รัน auto-optimize เป็นรอบ (ขั้น 5) — หยุดร้าน CTR ต่ำเอง. ข้ามถ้าปิดระบบอยู่."""
+    from .services import system_state
     interval = settings.auto_optimize_interval_min * 60
     while True:
         await asyncio.sleep(interval)
+        if not system_state.is_enabled():
+            continue                      # ปิดระบบ → ไม่ทำงานอัตโนมัติ
         try:
             pipeline.auto_optimize()
         except Exception as e:  # pragma: no cover
