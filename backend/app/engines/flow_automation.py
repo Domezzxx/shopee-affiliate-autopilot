@@ -1,9 +1,16 @@
 import os
+import re
 import time
 import uuid
 import base64
 from playwright.sync_api import sync_playwright
 from ..config import settings
+
+
+def _media_name(src: str) -> str:
+    """ดึง media name จาก url (...?name=XXXX#t=8.89) — เทียบตัวนี้ ไม่ใช่ทั้ง url ที่มี #fragment เปลี่ยน."""
+    m = re.search(r"name=([^&#]+)", src or "")
+    return m.group(1) if m else ""
 
 def generate_video_flow(prompt: str) -> str:
     """
@@ -64,17 +71,40 @@ def generate_video_flow(prompt: str) -> str:
         print(f"[flow-auto] Locating prompt input using selector: {settings.flow_selector_input}")
         input_locator = page.locator(settings.flow_selector_input).first
         input_locator.wait_for(state="visible", timeout=15000)
-        
-        # Focus, select all, delete, and type
+
+        # Focus + clear
         input_locator.click()
         page.keyboard.press("Control+A")
         page.keyboard.press("Delete")
-        time.sleep(0.5)
-        
-        # Use keyboard typing to trigger Slate/React events properly
-        print(f"[flow-auto] Typing prompt...")
-        page.keyboard.type(prompt)
-        time.sleep(1)
+        time.sleep(0.4)
+
+        # พิมพ์ด้วย insertText (ทำงานกับ Slate/contenteditable ได้ ต่างจาก keyboard.type ที่ไม่เข้า)
+        print(f"[flow-auto] Typing prompt: {prompt[:60]}")
+        page.keyboard.insert_text(prompt)
+        time.sleep(0.8)
+
+        # ตรวจว่าพิมพ์เข้าจริง — ถ้าช่องว่าง ลองวิธีสำรอง (fill / type) ก่อนยอมแพ้
+        def _entered() -> str:
+            try:
+                return (input_locator.inner_text(timeout=2000) or "").strip()
+            except Exception:
+                return ""
+        if not _entered():
+            print("[flow-auto] insertText ไม่เข้า → ลอง fill/type สำรอง")
+            try:
+                input_locator.click()
+                input_locator.fill(prompt)
+            except Exception:
+                page.keyboard.type(prompt, delay=15)
+            time.sleep(0.8)
+        if not _entered():
+            raise RuntimeError("พิมพ์ prompt เข้า Google Flow ไม่ได้ (ช่องว่าง) — selector input อาจเปลี่ยน")
+        print(f"[flow-auto] ✓ prompt ในช่องแล้ว: {_entered()[:50]}")
+
+        # เก็บรายการวีดีโอ "เดิม" ในโปรเจกต์ ก่อนกด Generate → จะได้รู้ว่าตัวไหนคือตัวใหม่
+        existing_srcs = page.locator("video").evaluate_all("els => els.map(e => e.src).filter(Boolean)")
+        existing_names = {_media_name(s) for s in existing_srcs if _media_name(s)}
+        print(f"[flow-auto] วีดีโอเดิมในโปรเจกต์: {len(existing_names)} ตัว")
         
         # 5) Locate and click Generate button
         print(f"[flow-auto] Locating generate button using selector: {settings.flow_selector_generate}")
@@ -90,8 +120,27 @@ def generate_video_flow(prompt: str) -> str:
             time.sleep(0.5)
             
         print("[flow-auto] Clicking Generate button...")
-        gen_btn.click()
-        
+        try:
+            gen_btn.click()
+        except Exception as e:
+            print(f"[flow-auto] คลิกปุ่ม Generate ไม่ได้ ({str(e)[:50]})")
+        time.sleep(1.5)
+
+        # ตรวจว่า submit สำเร็จ (ช่อง prompt ควรเคลียร์) — ถ้ายังค้าง = ยังไม่ส่ง → กด Enter ในช่อง
+        if _entered():
+            print("[flow-auto] prompt ยังค้างในช่อง → ลอง submit ด้วย Enter")
+            try:
+                input_locator.click()
+                page.keyboard.press("Enter")
+            except Exception:
+                pass
+            time.sleep(1.5)
+        if _entered():
+            # prompt ยังค้าง = submit ไม่ทำงาน (ปุ่ม Generate ของ Flow เปลี่ยน/หาไม่เจอ)
+            # → fail เร็ว ไม่ค้าง 4 นาที + ไม่หยิบวีดีโอเก่ามาแทน (ให้ media_gemini fallback)
+            raise RuntimeError("Google Flow ไม่ submit (prompt ค้างในช่อง) — ปุ่ม Generate หาไม่เจอ/UI เปลี่ยน")
+        print("[flow-auto] ✓ submit สำเร็จ (ช่อง prompt ว่างแล้ว)")
+
         # 6) Wait for and click Approve button (อนุมัติ)
         # Google Flow presents the generated video in the sidebar and requires approval.
         print("[flow-auto] Waiting for Approve button...")
@@ -117,23 +166,36 @@ def generate_video_flow(prompt: str) -> str:
                 break
             time.sleep(5)
             
-        # 7) Wait for Video element to appear and be loaded (up to 5 minutes)
-        print("[flow-auto] Waiting for video element in DOM...")
-        video_locator = page.locator("video").first
-        video_locator.wait_for(state="attached", timeout=300000)
-        
+        # 7) รอวีดีโอ "ใหม่" (src ไม่ซ้ำของเดิม) — กันบั๊กหยิบวีดีโอเก่าตัวแรกมา
+        print("[flow-auto] Waiting for NEW video to generate (up to ~6 นาที)...")
         video_url = ""
-        # Wait until video has a source URL
-        for _ in range(60):
-            video_url = video_locator.evaluate("el => el.src")
-            if video_url and "media.getMediaUrlRedirect" in video_url:
+        for i in range(120):   # ~4 นาที
+            try:
+                srcs = page.locator("video").evaluate_all("els => els.map(e => e.src).filter(Boolean)")
+            except Exception as e:
+                # page navigate/หลุด → หา Flow page ใหม่จาก context (กัน Target closed)
+                print(f"[flow-auto] page หลุดชั่วคราว ({str(e)[:40]}) → re-acquire")
+                try:
+                    page = next((p for p in context.pages
+                                 if "flow" in p.url or "labs.google" in p.url), page)
+                except Exception:
+                    pass
+                time.sleep(2)
+                continue
+            # เทียบที่ media NAME (ไม่ใช่ทั้ง url ที่มี #fragment) → ได้วีดีโอใหม่จริง
+            new = [s for s in srcs
+                   if "media.getMediaUrlRedirect" in s and _media_name(s) and _media_name(s) not in existing_names]
+            if new:
+                video_url = new[-1]
                 break
+            if i % 15 == 0:    # log ทุก ~30 วิ ให้รู้ว่ายังรออยู่
+                print(f"[flow-auto] ...รอวีดีโอใหม่ (มีในจอ {len(srcs)} ตัว, ยังไม่มีตัวใหม่) {i*2}s")
             time.sleep(2)
-            
+
         if not video_url:
-            raise RuntimeError("Timeout waiting for video source URL to be populated.")
-            
-        print(f"[flow-auto] Video generated! Direct URL: {video_url}")
+            raise RuntimeError("Timeout รอวีดีโอใหม่ — generate อาจไม่เริ่ม/ไม่เสร็จ (เช็ค prompt เข้าไหม)")
+
+        print(f"[flow-auto] ✓ วีดีโอใหม่ generate เสร็จ: {video_url}")
         
         # 8) Download the video using browser context fetch
         print("[flow-auto] Downloading video via browser context fetch...")
