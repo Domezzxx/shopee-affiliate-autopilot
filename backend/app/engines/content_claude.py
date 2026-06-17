@@ -10,8 +10,8 @@ from typing import Any
 
 from ..config import settings
 
-# 3 platform × A/B = 6 variant ต่อร้าน
-PLATFORMS = ["facebook", "instagram", "youtube"]
+# 4 platform × A/B = 8 variant ต่อร้าน
+PLATFORMS = ["facebook", "instagram", "youtube", "shopee_video"]
 
 CONTENT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -88,21 +88,48 @@ SYSTEM = (
     "• A vs B ต้องคนละมุมจริง: A = สายคุ้ม/ดีล/ตัวเลข, B = สายฟิน/ดราม่าหิว/ASMR. ห้ามคล้ายกัน.\n"
     "• โทนต่อ platform: FB=อบอุ่นแชร์ได้, IG=ฮิปมินิมอล, YouTube=เล่าเรื่องปากต่อปาก.\n"
     "• caption สั้น มี emoji พอดี เว้นบรรทัด ปิดด้วย CTA · first_comment ใส่ {LINK} · hashtags 4-6 อัน.\n"
-    "• image_prompt/video_prompt = อังกฤษ อาหารโคลสอัพน่ากินสุด มีไอ/ซอสยืด/แสงสวย 9:16 vertical.\n"
+    "• image_prompt/video_prompt = อังกฤษ อาหารโคลสอัพน่ากินสุด มีไอ/ซอสยืด/แสงสวย 9:16 vertical, realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings.\n"
     "ภาษาไทยธรรมชาติเหมือนคนรีวิวจริง."
 )
 
 
-def _prompt(store: dict) -> str:
+def _prompt(store: dict, label: str) -> str:
+    if label == "A":
+        style_desc = (
+            "สไตล์คอนเทนต์กลุ่ม A (สายคุ้ม/โปรโมชั่น/ตัวเลข):\n"
+            "- เน้นเรื่องความคุ้มค่า ราคาประหยัด ดีลพิเศษ ส่วนลดเยอะ หรือเรตติ้งรีวิวจำนวนมาก\n"
+            "- Hook ต้องสะกิดต่อมสายประหยัด เช่น 'ราคานี้ได้ยังไง?', 'คุ้มกว่านี้มีอีกไหม?'\n"
+            "- video_title ต้องใช้ตัวเลขหรือยอดขาย หรือความประหยัดนำหน้า มีอีโมจิดึงดูด\n"
+            "- voiceover_script ต้องพากย์เสียงพากย์ชวนตื่นเต้น มีพลัง พูดถึงดีลเด็ด ความคุ้มราคา คุ้มค่าและประหยัดแบบสะใจสุดๆ ดึงดูดให้อยู่ดูต่อ\n"
+            "- image_prompt และ video_prompt ต้องเป็นภาษาอังกฤษ เน้นจานใหญ่ แสงสว่างสดใส (bright lighting) "
+            "และมีองค์ประกอบของความคุ้มค่า (value-for-money atmosphere) พร้อมเงื่อนไขบังคับ "
+            "'realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings'"
+        )
+    else:
+        style_desc = (
+            "สไตล์คอนเทนต์กลุ่ม B (สายฟิน/ดราม่าหิว/ASMR):\n"
+            "- เน้นย้ำเรื่องความอร่อยแสงออกปาก กลิ่นหอมฟุ้งลอยมา ควันฉุยไหลเยิ้ม คลื่นเสียง ASMR ทรมานใจยามดึก\n"
+            "- Hook ต้องเปิดด้วยอาการทรมานความหิว เช่น 'เห็นคลิปนี้ตอนดึกขออภัยด้วยนะ', 'คำแรกถึงกับหลับตาฟิน'\n"
+            "- video_title เน้นความฟิน ความแซ่บ หรือความอร่อยที่หยุดไม่อยู่\n"
+            "- voiceover_script ต้องพากย์เสียงพากย์ด้วยคำบรรยายที่เห็นภาพชัดเจน รสชาตินุ่มละมุน ความเข้มข้น ความหอมกรุ่นชวนกิน เพื่อกระตุ้นความหิวดึงดูดให้อยู่ดูต่อจนจบ\n"
+            "- image_prompt และ video_prompt ต้องเป็นภาษาอังกฤษ เน้นความรู้สึกอยากกินแบบสุดขีด (mouthwatering close-up) "
+            "มีควันลอยฉุย (steam rising) หรือน้ำซุป/ซอสไหลเยิ้ม (sauce pouring / cheese pull) "
+            "พร้อมเงื่อนไขบังคับ 'realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings'"
+        )
+        
     return (
-        "เขียนคอนเทนต์ affiliate ครบชุดสำหรับร้านนี้:\n"
+        f"เขียนคอนเทนต์ affiliate สำหรับร้านนี้ในกลุ่มตัวเลือก {label} (สำหรับ Facebook, Instagram, YouTube รวม 3 variants):\n"
         f"- ชื่อร้าน: {store['name']}\n"
         f"- ย่าน: {store.get('area','')}\n"
         f"- เรตติ้ง: {store.get('rating')} ({store.get('review_count')} รีวิว)\n"
         f"- เมนูเด่น: {', '.join(store.get('menu', [])[:6])}\n"
         f"- ช่วงราคา: {store.get('price_range','')}\n\n"
-        "ออกผลลัพธ์ครบ A/B ทั้ง 3 platform (รวม 6 variants) + วิเคราะห์ร้าน + ตารางเวลาโพสต์ที่ดีที่สุด.\n"
-        "first_comment ใส่ {LINK} ตรงที่จะวางลิงก์ affiliate."
+        f"{style_desc}\n\n"
+        f"ข้อบังคับสำคัญ:\n"
+        f"1. สร้างเฉพาะ variants ที่มีฟิลด์ label เป็น '{label}' เท่านั้น จำนวน 3 variants (platform ละ 1 ชิ้น)\n"
+        f"2. ห้ามสร้าง label อื่นๆ ปะปนมาเด็ดขาด ทุก variant ใน list ต้องมี label: '{label}'\n"
+        f"3. first_comment ใส่ {{LINK}} เสมอ\n"
+        f"4. ตอบกลับตามโครงสร้าง JSON_SKELETON ที่ระบุ"
     )
 
 
@@ -120,9 +147,9 @@ def _mock(store: dict) -> dict:
             "hashtags": ["#กินอะไรดี", f"#{area.replace(' ','')}", "#ShopeeFood", "#ของกินคุ้ม", "#รีวิวร้านอร่อย"],
             "cta": "แตะลิงก์คอมเมนต์แรกสั่งเลย ก่อนโปรหมด!",
             "first_comment": f"🔗 สั่ง {dish} ร้าน {store['name']} ได้เลย 👉 {{LINK}}\nส่งไว ราคาคุ้ม 🛵",
-            "voiceover_script": f"บอกเลยว่าคุ้ม! {dish}ร้าน {store['name']} {store.get('rating')} ดาว สั่งผ่าน Shopee Food ลิงก์อยู่คอมเมนต์",
+            "voiceover_script": f"บอกเลยว่าคุ้มสุดๆ! {dish}ร้าน {store['name']} {store.get('rating')} ดาว สั่งผ่าน Shopee Food คุ้มราคา แบงค์แดงมีทอน ลิงก์อยู่คอมเมนต์เลย!",
             "image_prompt": f"appetizing close-up of {dish}, thai food, vibrant colors, price tag vibe, 9:16 vertical, food photography",
-            "video_prompt": f"cinematic food reel of {dish} steaming hot, slow motion, value-for-money mood, 9:16 vertical, 8 seconds",
+            "video_prompt": f"cinematic food reel of {dish} steaming hot, realistic human actor, real person, photorealistic, no cartoons, slow motion, value-for-money mood, 9:16 vertical, 8 seconds",
         })
         variants.append({
             "label": "B", "platform": p,
@@ -132,9 +159,9 @@ def _mock(store: dict) -> dict:
             "hashtags": [f"#ของกิน{area.replace(' ','')}", "#คาเฟ่อุดร", "#ShopeeFood", "#กินจุก", "#ฟินเวอร์"],
             "cta": "สั่งเลยก่อนหิวกว่านี้ ลิงก์คอมเมนต์แรก!",
             "first_comment": f"😋 ทนหิวไม่ไหวแล้วใช่ไหม กดสั่งเลย 👉 {{LINK}}",
-            "voiceover_script": f"คำแรกก็ใจละลาย {dish}ร้าน {store['name']} ต้องลอง สั่งผ่าน Shopee Food ได้เลย",
+            "voiceover_script": f"คำแรกก็ใจละลาย! {dish}ร้าน {store['name']} รสชาติกลมกล่อม หอมน้ำซุปเข้มข้นจนต้องร้องว้าว สั่งผ่าน Shopee Food ฟินด่วนๆ เลย!",
             "image_prompt": f"top-down flatlay of {dish} with side dishes, warm cozy light, mouthwatering, 9:16 vertical",
-            "video_prompt": f"fast-cut foodie ASMR reel, hands picking up {dish}, cheese/sauce pull close-up, 9:16 vertical",
+            "video_prompt": f"fast-cut foodie ASMR reel, hands picking up {dish}, realistic human actor, real person, photorealistic, no cartoons, cheese/sauce pull close-up, 9:16 vertical",
         })
     return {
         "store_analysis": {
@@ -152,14 +179,14 @@ def _mock(store: dict) -> dict:
     }
 
 
-def _claude_generate(store: dict) -> tuple[dict, float]:
+def _claude_generate(store: dict, label: str) -> tuple[dict, float]:
     import anthropic
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     resp = client.messages.create(
         model=settings.content_model,
         max_tokens=4000,
         system=SYSTEM,
-        messages=[{"role": "user", "content": _prompt(store)}],
+        messages=[{"role": "user", "content": _prompt(store, label)}],
         output_config={"format": {"type": "json_schema", "schema": CONTENT_SCHEMA}},
     )
     text = next((b.text for b in resp.content if b.type == "text"), "{}")
@@ -169,13 +196,12 @@ def _claude_generate(store: dict) -> tuple[dict, float]:
     return data, round(cost_usd * 36, 3)
 
 
-# โครง JSON ที่บอก Gemini ให้ตอบเป๊ะ (version-robust — ไม่พึ่ง response_schema ของ SDK)
 _JSON_SKELETON = (
     '{\n'
     '  "store_analysis": {"strengths": ["..."], "target_audience": "...", '
-    '"best_platform": "facebook|instagram|youtube", "hook_angle": "..."},\n'
-    '  "variants": [   // ต้องมี 6 ชิ้น = label A และ B ต่อทุก platform (facebook, instagram, youtube)\n'
-    '    {"label": "A|B", "platform": "facebook|instagram|youtube", "hook": "...", '
+    '"best_platform": "facebook|instagram|youtube|shopee_video", "hook_angle": "..."},\n'
+    '  "variants": [   // ต้องมี 4 ชิ้นสำหรับ label ที่กำหนดต่อทุก platform (facebook, instagram, youtube, shopee_video)\n'
+    '    {"label": "A|B", "platform": "facebook|instagram|youtube|shopee_video", "hook": "...", '
     '"video_title": "ชื่อคลิปไวรัลสไตล์อินฟลูอาหาร 30-55 ตัวอักษร มีตัวเลข+เมนู+อีโมจิ", '
     '"caption": "...", "hashtags": ["#..."], "cta": "...", '
     '"first_comment": "... {LINK} ...", "voiceover_script": "...", '
@@ -186,14 +212,14 @@ _JSON_SKELETON = (
 )
 
 
-def _gemini_generate(store: dict) -> tuple[dict, float]:
+def _gemini_generate(store: dict, label: str) -> tuple[dict, float]:
     """เขียนคอนเทนต์ด้วย Gemini (free tier) — ออก JSON. ค่าใช้จ่าย ฿0 บน free tier."""
     from google import genai
     from google.genai import types
 
     client = genai.Client(api_key=settings.gemini_api_key)
     prompt = (
-        f"{SYSTEM}\n\n{_prompt(store)}\n\n"
+        f"{SYSTEM}\n\n{_prompt(store, label)}\n\n"
         f"ตอบกลับเป็น JSON เท่านั้น (ไม่มีข้อความอื่น ไม่มี markdown) ตามโครงนี้เป๊ะ:\n{_JSON_SKELETON}"
     )
     resp = client.models.generate_content(
@@ -211,9 +237,21 @@ def generate_content(store: dict) -> tuple[dict, float]:
     provider = settings.content_provider
     try:
         if provider == "gemini" and settings.has_gemini:
-            return _gemini_generate(store)
+            # เจน A
+            data_A, cost_A = _gemini_generate(store, "A")
+            # เจน B
+            data_B, cost_B = _gemini_generate(store, "B")
+            # รวม
+            data_A["variants"] = data_A.get("variants", []) + data_B.get("variants", [])
+            return data_A, cost_A + cost_B
         if provider == "claude" and settings.has_claude:
-            return _claude_generate(store)
-    except Exception as e:  # pragma: no cover
+            # เจน A
+            data_A, cost_A = _claude_generate(store, "A")
+            # เจน B
+            data_B, cost_B = _claude_generate(store, "B")
+            # รวม
+            data_A["variants"] = data_A.get("variants", []) + data_B.get("variants", [])
+            return data_A, cost_A + cost_B
+    except Exception as e:
         print(f"[content:{provider}] error → fallback mock: {e}")
     return _mock(store), 0.0

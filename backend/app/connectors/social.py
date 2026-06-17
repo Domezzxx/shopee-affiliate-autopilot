@@ -282,21 +282,39 @@ def _post_phone(platform: str, caption: str, media_path: str) -> dict:
     if not device:
         return {"ok": True, "method": "phone", "account": "mock_phone",
                 "external_id": f"ph_{uuid.uuid4().hex[:10]}", "error": ""}
-    pkg = PACKAGES.get(platform)
-    _adb(device, "push", media_path, "/sdcard/DCIM/autopilot.png")
-    ok, _ = _adb(device, "shell", "monkey", "-p", pkg, "-c",
-                 "android.intent.category.LAUNCHER", "1")
-    # หมายเหตุ: ขั้นแตะ/พิมพ์แคปชั่นจริง ทำผ่าน uiautomator2 (Sprint 4)
-    return {"ok": ok, "method": "phone", "account": device,
-            "external_id": f"ph_{uuid.uuid4().hex[:10]}" if ok else "",
-            "error": "" if ok else "adb launch failed"}
+    
+    from . import phone_automator
+    
+    print(f"[phone-farm] Routing post to device {device} for platform {platform}")
+    try:
+        if platform == "facebook":
+            res = phone_automator.post_facebook_reel(device, media_path, caption)
+        elif platform == "instagram":
+            res = phone_automator.post_instagram_reel(device, media_path, caption)
+        elif platform == "youtube":
+            res = phone_automator.post_youtube_shorts(device, media_path, caption)
+        elif platform == "shopee_video":
+            res = phone_automator.post_shopee_video(device, media_path, caption)
+        else:
+            return {"ok": False, "method": "phone", "account": device, "external_id": "",
+                    "error": f"Platform {platform} is not supported on phone farm."}
+                    
+        if res["ok"]:
+            return {"ok": True, "method": "phone", "account": device,
+                    "external_id": f"ph_{uuid.uuid4().hex[:10]}", "error": ""}
+        else:
+            return {"ok": False, "method": "phone", "account": device, "external_id": "",
+                    "error": res["error"]}
+    except Exception as e:
+        return {"ok": False, "method": "phone", "account": device, "external_id": "",
+                "error": f"Phone automation exception: {e}"}
 
 
 # ----------------------------------------------------------- entry points
 def publish(platform: str, caption: str, media_path: str, title: str = "") -> dict:
     """โพสต์คอนเทนต์ — Hybrid routing ตาม POSTING_MODE. title = ชื่อคลิปไวรัล (ใช้กับ YouTube)."""
     mode = settings.posting_mode
-    if mode == "phone":
+    if mode == "phone" or platform == "shopee_video":
         return _post_phone(platform, caption, media_path)
     if platform == "youtube":
         res = _post_youtube(caption, media_path, title)

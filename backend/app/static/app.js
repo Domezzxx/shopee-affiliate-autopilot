@@ -14,6 +14,37 @@ const toast = (msg, err = false) => {
 
 let showAddForm = false;
 
+// ---------------- progress การสร้างคลิป AI
+let progressTimer = null, progressRefreshed = false;
+function renderProgress(jobs) {
+  const box = $("#progress");
+  if (!jobs || !jobs.length) { box.className = "hidden"; box.innerHTML = ""; return; }
+  box.className = "";
+  box.innerHTML = `<div class="phead"><span class="pspin"></span> กำลังสร้างคลิป AI · ${jobs.length} ร้าน</div>` +
+    jobs.map((j) => `
+    <div class="pjob ${j.status}">
+      <div class="ptop">
+        <span class="pname">${esc(j.name)}</span>
+        <span class="pstep">${esc(j.step)}${j.detail ? " · " + esc(j.detail) : ""} · ${j.pct}%</span>
+      </div>
+      <div class="pbar"><div class="pfill" style="width:${j.pct}%"></div></div>
+    </div>`).join("");
+}
+async function pollProgress() {
+  let jobs = [];
+  try { jobs = (await api("/progress")).jobs || []; } catch (e) { return; }
+  renderProgress(jobs);
+  const active = jobs.some((j) => j.status === "running");
+  if (active) progressRefreshed = false;
+  else if (jobs.length && !progressRefreshed) { progressRefreshed = true; loadAll(); }  // เสร็จ → refresh 1 ครั้ง
+  if (!jobs.length && progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+}
+function startProgress() {
+  progressRefreshed = false;
+  if (!progressTimer) progressTimer = setInterval(pollProgress, 1200);
+  pollProgress();
+}
+
 // ---------------- tabs
 document.querySelectorAll(".tabs button").forEach((b) =>
   b.addEventListener("click", () => {
@@ -32,8 +63,8 @@ $("#btn-add").onclick = () => {
 };
 $("#btn-runall").onclick = async () => {
   const r = await api("/run-all", { method: "POST" });
-  toast(`เริ่มรัน ${r.count} ร้าน — Claude+Gemini กำลังทำงานเบื้องหลัง`);
-  setTimeout(loadAll, 4000);
+  toast(`เริ่มรัน ${r.count} ร้าน — ดูความคืบหน้าด้านบน`);
+  startProgress();
 };
 $("#btn-sim").onclick = async () => {
   const r = await api("/metrics/simulate", { method: "POST" });
@@ -74,13 +105,15 @@ async function loadKpis() {
   const d = await api("/dashboard");
   const c = d.config;
   const sw = (ok) => `<span class="${ok ? "ok" : "dim"}">${ok ? "●" : "○"}</span>`;
+  const profitColor = d.profit_baht >= 0 ? "ok" : "bad";
+  const profitSign = d.profit_baht >= 0 ? "+฿" : "-฿";
   $("#kpis").innerHTML = `
     <div class="kpi"><div class="v">${d.stores_total}</div><div class="l">ร้านทั้งหมด</div>
       <div class="s"><span class="ok">${d.stores_active} active</span> · <span class="bad">${d.stores_paused} paused</span></div></div>
     <div class="kpi"><div class="v">${d.posts_total}</div><div class="l">โพสต์</div>
       <div class="s bad">${d.posts_failed} ล้มเหลว</div></div>
-    <div class="kpi"><div class="v">${(d.comments_posted ?? 0).toLocaleString()}</div><div class="l">คอมเมนต์ลิงก์</div>
-      <div class="s dim">affiliate link วางแล้ว</div></div>
+    <div class="kpi"><div class="v">฿${d.revenue_baht.toLocaleString()}</div><div class="l">รายได้ประเมิน</div>
+      <div class="s ${profitColor}">${profitSign}${Math.abs(d.profit_baht).toLocaleString()} กำไรสุทธิ</div></div>
     <div class="kpi"><div class="v">${d.impressions.toLocaleString()}</div><div class="l">Impressions</div></div>
     <div class="kpi"><div class="v">${(d.ctr * 100).toFixed(2)}%</div><div class="l">CTR เฉลี่ย</div></div>
     <div class="kpi"><div class="v">฿${d.content_cost_baht}</div><div class="l">ค่า AI เขียน (สะสม)</div></div>
@@ -122,7 +155,17 @@ async function renderStores() {
       <div class="meta">${esc(x.area) || "—"} · ⭐${x.rating} (${x.review_count} รีวิว)</div>
       <div class="meta">เมนู: ${esc((x.menu || []).slice(0, 3).join(", ")) || "—"}</div>
       <div class="meta">${x.affiliate_link ? "🔗 มีลิงก์" : '<span class="bad">⚠ ยังไม่มีลิงก์</span>'}</div>
-      <div class="row">
+      <div class="meta" style="margin-top:6px; font-weight:600">
+        <span>ทุน: ฿${x.cost}</span> · 
+        <span class="${x.profit >= 0 ? 'ok' : 'bad'}">กำไร: ฿${x.profit}</span>
+      </div>
+      <div class="meta" style="margin-top:6px">
+        <label style="cursor:pointer; display:flex; align-items:center; gap:6px; user-select:none">
+          <input type="checkbox" ${x.requires_approval ? "checked" : ""} onchange="toggleApproval(${x.id}, this.checked)" />
+          ต้องการอนุมัติก่อนโพสต์
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px">
         <span class="badge ${x.status}">${x.status}${x.low_ctr_days ? " " + x.low_ctr_days + "วัน" : ""}</span>
         <button class="go" onclick="runStore(${x.id})">▶ รันร้านนี้</button>
       </div>
@@ -150,7 +193,7 @@ async function submitAddStore() {
     toast(`เพิ่ม "${r.name}" แล้ว — กำลังรันร้านนี้`);
     await api(`/stores/${r.id}/run`, { method: "POST" });
     showAddForm = false;
-    setTimeout(loadAll, 4000);
+    loadAll(); startProgress();
   } catch (e) { toast(e.message, true); }
 }
 async function submitCsv(ev) {
@@ -165,16 +208,29 @@ async function submitCsv(ev) {
 }
 window.runStore = async (id) => {
   await api(`/stores/${id}/run`, { method: "POST" });
-  toast("เริ่มรันร้านนี้ — รอ Claude+Gemini สักครู่"); setTimeout(loadAll, 4000);
+  toast("เริ่มรันร้านนี้ — ดูความคืบหน้าด้านบน"); startProgress();
 };
 window.makeReel = async (id, label = "A") => {
   const voice = document.getElementById(`voice-sel-${id}`)?.value || "female";
   const vlabel = voice === "male" ? "เสียงผู้ชาย" : "เสียงผู้หญิง";
-  toast(`กำลังรวมคลิป ${label} (${vlabel})... (~20-40 วิ)`);
   try {
-    const r = await api(`/stores/${id}/reel?label=${label}&voice=${voice}`, { method: "POST" });
-    toast(`รวม ${r.scenes} ฉาก (${label} · ${vlabel}) เสร็จแล้ว!`);
-    render("content");
+    await api(`/stores/${id}/reel?label=${label}&voice=${voice}`, { method: "POST" });
+    toast(`เริ่มรวมคลิป ${label} (${vlabel}) — ดูความคืบหน้าด้านบน`);
+    startProgress();
+  } catch (e) { toast(e.message, true); }
+};
+window.toggleApproval = async (id, enable) => {
+  try {
+    await api(`/stores/${id}/toggle-approval?enable=${enable}`, { method: "POST" });
+    toast("อัปเดตการตั้งค่าการอนุมัติแล้ว");
+    loadAll();
+  } catch (e) { toast(e.message, true); }
+};
+window.approveJob = async (id) => {
+  try {
+    await api(`/jobs/${id}/approve`, { method: "POST" });
+    toast("อนุมัติงานและกำลังโพสต์เบื้องหลัง...");
+    loadAll(); startProgress();
   } catch (e) { toast(e.message, true); }
 };
 
@@ -185,10 +241,13 @@ async function renderContent() {
   for (const st of s.filter((x) => x.status !== "new").slice(0, 20)) {
     const c = await api(`/content/${st.id}`).catch(() => null);
     if (!c || !c.variants.length) continue;
+    const latestJob = c.jobs[0] || {};
+    const isPending = latestJob.status === "pending_approval";
     const ab = await api(`/abtest/${st.id}`).catch(() => ({ verdict: {} }));
     html += `<div class="card" style="margin-bottom:14px">
       <div class="row"><h4>${esc(st.name)}</h4>
         <span>
+          ${isPending ? `<button class="primary" style="margin-right:6px" onclick="approveJob(${latestJob.id})">✅ อนุมัติ & โพสต์</button>` : ""}
           <select id="voice-sel-${st.id}" class="voicesel">
             <option value="female">👩 เสียงผู้หญิง</option>
             <option value="male">👨 เสียงผู้ชาย</option>
@@ -196,6 +255,7 @@ async function renderContent() {
           <button class="go" onclick="makeReel(${st.id},'A')">🎬 รวมคลิป A</button>
           <button class="go" onclick="makeReel(${st.id},'B')">🎬 รวมคลิป B</button>
         </span></div>
+      ${isPending ? `<div class="banner mock" style="margin:8px 0 12px 0">⏳ คอนเทนต์ผลิตเสร็จแล้ว กำลังรอคุณอนุมัติเพื่อยิงโพสต์ออกไปยังแพลตฟอร์มต่าง ๆ</div>` : ""}
       ${c.reel_url ? `<div class="reelwrap"><div class="meta" style="margin-bottom:4px">คลิปรวม (montage) — โพสต์ได้เลย</div>
         <video class="reel" src="${c.reel_url}" controls loop playsinline></video></div>` : ""}
       <div class="preview">${c.variants.map((v) => `
@@ -279,4 +339,5 @@ async function loadAll() {
   render(active);
 }
 loadAll();
+startProgress();   // เผื่อมีงานสร้างคลิปค้างอยู่ตอนเปิด/รีเฟรชหน้า
 setInterval(loadKpis, 15000);

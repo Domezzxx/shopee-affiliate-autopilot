@@ -1,5 +1,7 @@
 {
+  "id": "afltautopilotopt01",
   "name": "2 — Run pipeline + Auto-optimize",
+  "active": false,
   "nodes": [
     {
       "parameters": {

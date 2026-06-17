@@ -84,22 +84,31 @@
 - [x] **เสียงบรรยากาศร้าน (Freesound)** — `engines/stock_sfx.py` (เสียง chatter ในร้านยาวต่อเนื่อง ไม่วนลูป + re-encode กันไฟล์เสีย + retry). แก้บั๊กเสียงประตู 1วิวนรัว
 - [x] **`video_ffmpeg.py`:** เกรดสีอาหาร+vignette · xfade + ความเร็วแปรผัน (beat) · `build_review_reel` (เสียงพากย์ก่อน→ตัดภาพพอดี ไม่เหลือช่องว่าง + cap 22วิ) · `_video_clip` footage→9:16 · แยก `_mux_audio` (3-stream amix + retry)
 - [x] `media_gemini`: `generate_food_broll` (หลายมุม) + `download_images` (รูป Shopee จริง)
+- [x] **Google Flow AI Browser Automation (ฟรีผ่าน Chrome Debugging)** — พัฒนาสคริปต์ Playwright CDP ควบคุม Chrome เจนวิดีโอฟรีผ่านหน้าเว็บ Google Flow ลดต้นทุน Veo API
 - [ ] ค้าง: เก็บเป็น engine ถาวร `build_restaurant_reel` + wire ปุ่ม dashboard · ตัดสินใจ Veo สำหรับ footage เป๊ะ
 
-## 🔜 Sprint 4 — Phone Farm จริง (6 เครื่อง)
-- [ ] ผูก uiautomator2 / Appium ต่อแอป (FB/IG/YouTube) — แตะปุ่ม+พิมพ์แคปชั่นจริง
-- [ ] จัดคิว + lock ต่อเครื่อง กันชนกัน + เช็คสุขภาพเครื่อง (online/offline)
-- [ ] anti-detection: สลับบัญชี, สุ่ม delay, จำลอง human behavior
+## ✅ Sprint 4 — Phone Farm จริง (6 เครื่อง) (เสร็จสมบูรณ์)
+- [x] ผูก uiautomator2 ต่อแอป (FB/IG/YouTube) — แตะปุ่ม+พิมพ์แคปชั่นจริง อัปเดตไฟล์มีเดียแกลเลอรีอัตโนมัติ
+- [x] จัดคิว + lock ต่อเครื่อง ด้วย Thread Locking กันชนกัน + ตรวจสอบสถานะการเชื่อมต่อ (online/offline)
+- [x] anti-detection: จำลองการป้อนตัวอักษรแบบพิมพ์จริงทีละอักษร (Humanized typing) + หน่วงเวลาสุ่มป้องกันการแบน
 
-## 🔜 Sprint 5 — Optimize + Scale
-- [ ] ดึง metric จริงจาก platform (FB Insights / IG / YouTube Analytics) เข้า /api/metrics
-- [ ] A/B ตัดสินอัตโนมัติ → ครั้งต่อไปใช้ variant ผู้ชนะเป็น base
-- [ ] รายงานสรุป/วัน (Telegram/LINE) + กราฟใน dashboard
-- [ ] รองรับหลายจังหวัด/หลายคีย์เวิร์ด
+## 🟢 Sprint 6 — Production Auto-Pilot (รวม Flow video เข้าคอนเทนต์ + ครบวงจรอัตโนมัติ) ← กำลังทำ
+> breakthrough: Google Flow เจน **ก๋วยเตี๋ยวเรือ Veo จริง ฟรี** ได้แล้ว → เอามาเป็นหัวใจคอนเทนต์ + ทำให้รันเองครบวง
+- [ ] **P1 รวม Flow video เข้า reel** — ใช้ `video_flow_*.mp4` (เมนูจริงเป๊ะ motion) เป็น hero footage ใน `build_review_reel`/โหมดพ่อครัว แทน/ผสม Pexels → คลิปรีวิวได้เมนูจริง 100%
+- [ ] **P1 เก็บโหมดรีวิวในร้านเป็น engine ถาวร** `build_restaurant_reel` (ย้ายจาก `scripts/_chef_demo.py`) + ปุ่ม dashboard "🍜 รีวิวในร้าน"
+- [ ] **P2 Harden Flow automation** — คิว 1 งาน/แท็บ + retry + selector fallback + timeout + health-check (Chrome เปิด/ล็อกอินไหม) + progress bar (Flow ใช้เวลาหลายนาที)
+- [ ] **P2 วงจรอัตโนมัติเต็ม** — n8n/scheduler รายวัน: scrape → generate(+Flow video) → คิวอนุมัติ → โพสต์ phone farm → เก็บผล
+- [ ] **P3 metrics จริง + A/B auto-decide** — ดึงผลจาก platform/phone farm → ตัดสิน A/B → ใช้ variant ผู้ชนะเป็น base
+- [ ] **P3 รายงานสรุป/วัน** (Telegram) + กราฟ dashboard + รองรับหลายคีย์เวิร์ด/จังหวัด
+
+## ✅ เสร็จแล้วระหว่างทาง (ย้ายจาก backlog)
+- [x] ระบบ approve คอนเทนต์ก่อนโพสต์ (human-in-the-loop) — Store.requires_approval + pending_approval + ปุ่มอนุมัติ
+- [x] Shopee Video connector (phone farm `post_shopee_video`)
+- [x] รายได้ประเมินต่อร้าน (affiliate_commission_per_click) ใน dashboard
 
 ---
 
 ## Backlog / ไอเดียเพิ่ม
-- เพิ่ม TikTok + Shopee Video (ตาม flowchart เดิม) เป็น connector
-- ระบบ approve คอนเทนต์ก่อนโพสต์ (human-in-the-loop) สำหรับร้านสำคัญ
-- คิดราคา/กำไรต่อร้าน real-time + ตัดร้านขาดทุนอัตโนมัติ
+- เพิ่ม TikTok เป็น connector (phone farm)
+- คิดกำไรต่อร้าน real-time + ตัดร้านขาดทุนอัตโนมัติ
+- Flow video: cache/reuse ต่อเมนู (ไม่เจนซ้ำ) + หลาย prompt ต่อร้าน

@@ -14,12 +14,40 @@ from ..engines import content_claude, media_gemini
 from ..connectors import social
 
 
+# ----------------------------------------------------------- progress tracking (สำหรับ progress bar บน dashboard)
+_PROGRESS: dict = {}
+
+
+def _prog(key, name: str, step: str, pct: float,
+          status: str = "running", detail: str = "") -> None:
+    """อัปเดตความคืบหน้า. key = id งาน (store_id สำหรับรันคลิป / 'reel-{id}-{label}' สำหรับรวมคลิป)."""
+    _PROGRESS[key] = {
+        "key": str(key), "name": name, "step": step,
+        "pct": max(0, min(100, int(pct))), "status": status, "detail": detail,
+        "ts": time.time(),
+    }
+
+
+def progress_list() -> list[dict]:
+    """รายการความคืบหน้าที่กำลังทำ — ตัด done/error ที่ค้างเกิน 12 วิ ออก (ให้หน้าเว็บเห็น 'เสร็จ' แวบนึง)."""
+    now = time.time()
+    out = []
+    for k, v in list(_PROGRESS.items()):
+        if v["status"] in ("done", "error") and now - v["ts"] > 12:
+            _PROGRESS.pop(k, None)
+            continue
+        out.append(v)
+    return sorted(out, key=lambda x: x["ts"])
+
+
 def generate_for_store(store_id: int) -> dict:
     """ขั้น 2+3: Claude เขียน + Gemini ทำสื่อ → สร้าง ContentJob + 6 Variant พร้อมสื่อ + คอมเมนต์แรก."""
     with get_session() as s:
         store = s.get(Store, store_id)
         if not store:
             return {"error": "store not found"}
+        name = store.name
+        _prog(store_id, name, "✍️ AI กำลังเขียนคอนเทนต์", 8)
         store_dict = {
             "name": store.name, "area": store.area, "rating": store.rating,
             "review_count": store.review_count, "price_range": store.price_range,
@@ -27,6 +55,7 @@ def generate_for_store(store_id: int) -> dict:
         }
         data, cost = content_claude.generate_content(store_dict)
 
+        _prog(store_id, name, "🎨 เริ่มสร้างภาพ/วีดีโอ", 18)
         job = ContentJob(
             store_id=store.id, status="media_ready",
             analysis_json=json.dumps(data["store_analysis"], ensure_ascii=False),
@@ -38,8 +67,12 @@ def generate_for_store(store_id: int) -> dict:
         )
         s.add(job); s.commit(); s.refresh(job)
 
-        for v in data["variants"]:
-            mtype, mpath, ipath = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"])
+        variants = data["variants"]
+        total = len(variants) or 1
+        for i, v in enumerate(variants):
+            _prog(store_id, name, f"🎬 สร้างสื่อ {i + 1}/{total}", 18 + int(i / total * 64),
+                  detail=f"{v['platform']} · {v['label']}")
+            mtype, mpath, ipath = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"], v["label"])
             s.add(Variant(
                 content_job_id=job.id, store_id=store.id, label=v["label"],
                 platform=v["platform"], hook=v["hook"],
@@ -52,6 +85,7 @@ def generate_for_store(store_id: int) -> dict:
             ))
         store.status = "active"
         s.add(store); s.commit()
+        _prog(store_id, name, "💾 บันทึกสื่อเสร็จ", 88)
         return {"content_job_id": job.id, "variants": 6, "cost_baht": cost}
 
 
@@ -94,13 +128,95 @@ def publish_job(content_job_id: int) -> dict:
     return {"posted": posted}
 
 
+def _store_name(store_id: int) -> str:
+    with get_session() as s:
+        st = s.get(Store, store_id)
+        return st.name if st else str(store_id)
+
+
 def run_full(store_id: int) -> dict:
-    """ครบวง 1 ร้าน: generate → publish."""
-    g = generate_for_store(store_id)
-    if "error" in g:
-        return g
-    p = publish_job(g["content_job_id"])
-    return {**g, **p}
+    """ครบวง 1 ร้าน: generate → publish. อัปเดต progress ตลอด (gen→post→done/error)."""
+    try:
+        g = generate_for_store(store_id)
+        if "error" in g:
+            _prog(store_id, _store_name(store_id), "❌ " + g["error"], 100, status="error")
+            return g
+        name = _store_name(store_id)
+        
+        # ตรวจสอบว่าร้านค้าต้องการอนุมัติก่อนโพสต์หรือไม่
+        with get_session() as s:
+            store = s.get(Store, store_id)
+            requires_approval = store.requires_approval if store else False
+            
+        if requires_approval:
+            # เปลี่ยนสถานะงาน ContentJob เป็น pending_approval
+            with get_session() as s:
+                job = s.get(ContentJob, g["content_job_id"])
+                if job:
+                    job.status = "pending_approval"
+                    s.add(job)
+                    s.commit()
+            _prog(store_id, name, "⏳ รออนุมัติก่อนโพสต์", 100, status="done")
+            return {**g, "status": "pending_approval", "detail": "Waiting for human approval"}
+            
+        _prog(store_id, name, "📤 กำลังโพสต์/วางลิงก์", 92)
+        p = publish_job(g["content_job_id"])
+        _prog(store_id, name, "✅ เสร็จแล้ว!", 100, status="done")
+        return {**g, **p}
+    except Exception as e:  # pragma: no cover
+        _prog(store_id, _store_name(store_id), f"❌ ผิดพลาด: {str(e)[:80]}", 100, status="error")
+        raise
+
+
+def build_montage(store_id: int, label: str = "A", voice_name: str | None = None) -> dict:
+    """รวมคลิป (montage) ของร้าน label A/B + อัปเดต progress bar ตลอด."""
+    import os
+    from ..engines import video_ffmpeg
+    key = f"reel-{store_id}-{label}"
+    name = _store_name(store_id)
+    det = f"คลิป {label}"
+    try:
+        with get_session() as s:
+            store = s.get(Store, store_id)
+            if not store:
+                return {"error": "store not found"}
+            name = store.name
+            vs = s.exec(select(Variant).where(Variant.store_id == store_id, Variant.label == label)).all()
+            scenes, narration, seen = [], [], set()
+            for v in vs:
+                img = v.image_path or (v.media_path if v.media_type == "image" else "")
+                if (not img or not os.path.exists(img)) and v.media_type == "video" and v.media_path and os.path.exists(v.media_path):
+                    thumb = video_ffmpeg.extract_frame(v.media_path)
+                    if thumb:
+                        v.image_path = thumb
+                        s.add(v)
+                        img = thumb
+                if img and os.path.exists(img) and img not in seen:
+                    seen.add(img); scenes.append((img, v.hook)); narration.append(v.voiceover_script or v.hook)
+            s.commit()
+            cta = [name[:24], "สั่งเลยตอนนี้!", "ลิงก์ในคอมเมนต์แรก"]
+        if not scenes:
+            _prog(key, name, "❌ ไม่มีภาพต้นฉบับ — รันร้านนี้ใหม่ก่อน", 100, status="error", detail=det)
+            return {"error": "no source images"}
+
+        _prog(key, name, "🎬 เริ่มรวมคลิป", 8, detail=det)
+        reel = video_ffmpeg.build_reel(
+            scenes, narration=" ".join(narration), voice=voice_name, cta_lines=cta,
+            progress_cb=lambda step, pct: _prog(key, name, step, pct, detail=det))
+        if not reel:
+            _prog(key, name, "❌ สร้างคลิปไม่สำเร็จ", 100, status="error", detail=det)
+            return {"error": "build failed"}
+
+        with get_session() as s:
+            store = s.get(Store, store_id)
+            store.reel_url = "/media/" + os.path.basename(reel)
+            s.add(store); s.commit()
+            url = store.reel_url
+        _prog(key, name, "✅ รวมคลิปเสร็จ!", 100, status="done", detail=det)
+        return {"reel_url": url, "scenes": len(scenes)}
+    except Exception as e:  # pragma: no cover
+        _prog(key, name, f"❌ ผิดพลาด: {str(e)[:80]}", 100, status="error", detail=det)
+        raise
 
 
 # ----------------------------------------------------------- A/B + auto-optimize
