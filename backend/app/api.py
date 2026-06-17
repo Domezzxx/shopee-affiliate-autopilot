@@ -297,6 +297,18 @@ def make_reel(store_id: int, background: BackgroundTasks, label: str = "A", voic
     return {"status": "started", "store_id": store_id, "label": label}
 
 
+@router.post("/stores/{store_id}/restaurant-reel")
+def make_restaurant_reel(store_id: int, background: BackgroundTasks, voice: str = "male"):
+    """รีวิวในร้าน: พ่อครัวพูดชวน + แอคชั่น (Flow video/stock) + พ่อครัว PiP + ASMR (เบื้องหลัง)."""
+    if not system_state.is_enabled():
+        raise HTTPException(409, "ระบบปิดอยู่ — กดเปิดระบบก่อน")
+    if not get_session().get(Store, store_id):
+        raise HTTPException(404, "store not found")
+    voice_name = VOICE_MAP.get(voice, "th-TH-NiwatNeural")
+    background.add_task(pipeline.build_restaurant, store_id, voice_name)
+    return {"status": "started", "store_id": store_id}
+
+
 # ----------------------------------------------------------------- posts
 @router.get("/posts")
 def list_posts():

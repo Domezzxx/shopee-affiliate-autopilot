@@ -253,6 +253,13 @@ window.makeReel = async (id, label = "A") => {
     startProgress();
   } catch (e) { toast(e.message, true); }
 };
+window.makeRestaurant = async (id) => {
+  try {
+    await api(`/stores/${id}/restaurant-reel?voice=male`, { method: "POST" });
+    toast("เริ่มทำรีวิวในร้าน (พ่อครัวพูด) — ดูความคืบหน้าด้านบน · ~1-2 นาที");
+    startProgress();
+  } catch (e) { toast(e.message, true); }
+};
 window.toggleApproval = async (id, enable) => {
   try {
     await api(`/stores/${id}/toggle-approval?enable=${enable}`, { method: "POST" });
@@ -288,6 +295,7 @@ async function renderContent() {
           </select>
           <button class="go" onclick="makeReel(${st.id},'A')">🎬 รวมคลิป A</button>
           <button class="go" onclick="makeReel(${st.id},'B')">🎬 รวมคลิป B</button>
+          <button class="primary" onclick="makeRestaurant(${st.id})">🍜 รีวิวในร้าน</button>
         </span></div>
       ${isPending ? `<div class="banner mock" style="margin:8px 0 12px 0">⏳ คอนเทนต์ผลิตเสร็จแล้ว กำลังรอคุณอนุมัติเพื่อยิงโพสต์ออกไปยังแพลตฟอร์มต่าง ๆ</div>` : ""}
       ${c.reel_url ? `<div class="reelwrap"><div class="meta" style="margin-bottom:4px">คลิปรวม (montage) — โพสต์ได้เลย</div>

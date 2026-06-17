@@ -94,9 +94,10 @@
 
 ## 🟢 Sprint 6 — Production Auto-Pilot (รวม Flow video เข้าคอนเทนต์ + ครบวงจรอัตโนมัติ) ← กำลังทำ
 > breakthrough: Google Flow เจน **ก๋วยเตี๋ยวเรือ Veo จริง ฟรี** ได้แล้ว → เอามาเป็นหัวใจคอนเทนต์ + ทำให้รันเองครบวง
-- [ ] **P1 รวม Flow video เข้า reel** — ใช้ `video_flow_*.mp4` (เมนูจริงเป๊ะ motion) เป็น hero footage ใน `build_review_reel`/โหมดพ่อครัว แทน/ผสม Pexels → คลิปรีวิวได้เมนูจริง 100%
-- [ ] **P1 เก็บโหมดรีวิวในร้านเป็น engine ถาวร** `build_restaurant_reel` (ย้ายจาก `scripts/_chef_demo.py`) + ปุ่ม dashboard "🍜 รีวิวในร้าน"
-- [ ] **P2 Harden Flow automation** — คิว 1 งาน/แท็บ + retry + selector fallback + timeout + health-check (Chrome เปิด/ล็อกอินไหม) + progress bar (Flow ใช้เวลาหลายนาที)
+- [x] **P1 เก็บโหมดรีวิวในร้านเป็น engine ถาวร** `talking_head.build_restaurant_reel` (พ่อครัวเต็มจอ→แอคชั่น+PiP+ASMR, มี progress) + `pipeline.build_restaurant` (รวมสื่อ: Flow video ถ้ามี ไม่งั้น stock) + endpoint `/stores/{id}/restaurant-reel` + ปุ่ม dashboard "🍜 รีวิวในร้าน" · ทดสอบจริงผ่าน (reel_dd571b81)
+- [x] **P1 รวม Flow video เข้า reel** — `build_restaurant` หยิบ `video_flow_*.mp4` ของร้านมาเป็น hero footage ก่อน (ไม่พอเติม stock) · ⚠️ Flow generate ยังไม่นิ่ง (UI ซับซ้อน) แต่โครงพร้อมรับเมื่อ Flow เสถียร
+- [x] **Flow: หาปุ่ม Generate จริง + พิมพ์เข้า Slate** (commit 5fc0381) — generate ได้บ้างแต่ไม่นิ่ง (chat panel แยก)
+- [ ] **P2 Harden Flow automation** — ระบุช่อง prompt หลัก (ไม่ใช่ .first ที่โดน chat) + คิว 1 งาน/แท็บ + retry + health-check
 - [ ] **P2 วงจรอัตโนมัติเต็ม** — n8n/scheduler รายวัน: scrape → generate(+Flow video) → คิวอนุมัติ → โพสต์ phone farm → เก็บผล
 - [ ] **P3 metrics จริง + A/B auto-decide** — ดึงผลจาก platform/phone farm → ตัดสิน A/B → ใช้ variant ผู้ชนะเป็น base
 - [ ] **P3 รายงานสรุป/วัน** (Telegram) + กราฟ dashboard + รองรับหลายคีย์เวิร์ด/จังหวัด
