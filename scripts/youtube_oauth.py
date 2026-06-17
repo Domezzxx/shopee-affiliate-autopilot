@@ -56,9 +56,26 @@ def _post_form(url: str, data: dict) -> dict:
         return json.loads(r.read().decode())
 
 
-def _write_env(cid: str, csec: str, refresh: str) -> bool:
+def _env_path() -> str:
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    envf = os.path.join(root, ".env")
+    return os.path.join(root, ".env")
+
+
+def _read_env() -> dict:
+    """อ่าน .env แบบง่าย → ใช้ Client ID/secret ที่ใส่ไว้แล้ว ไม่ต้องพิมพ์ซ้ำ."""
+    envf = _env_path()
+    out: dict[str, str] = {}
+    if os.path.exists(envf):
+        for ln in open(envf, encoding="utf-8").read().splitlines():
+            ln = ln.split("#", 1)[0].strip() if not ln.strip().startswith("#") else ""
+            if "=" in ln:
+                k, v = ln.split("=", 1)
+                out[k.strip()] = v.strip()
+    return out
+
+
+def _write_env(cid: str, csec: str, refresh: str) -> bool:
+    envf = _env_path()
     if not os.path.exists(envf):
         return False
     lines = open(envf, encoding="utf-8").read().splitlines()
@@ -80,8 +97,14 @@ def _write_env(cid: str, csec: str, refresh: str) -> bool:
 
 def main():
     print("=== YouTube OAuth — ขอ refresh token สำหรับอัปโหลด Shorts ===\n")
-    cid = input("Client ID: ").strip()
-    csec = input("Client secret: ").strip()
+    env = _read_env()
+    cid = os.environ.get("YOUTUBE_CLIENT_ID") or env.get("YOUTUBE_CLIENT_ID", "")
+    csec = os.environ.get("YOUTUBE_CLIENT_SECRET") or env.get("YOUTUBE_CLIENT_SECRET", "")
+    if cid and csec:
+        print(f"ใช้ Client ID จาก .env: {cid[:24]}...")
+    else:  # ยังไม่มีใน .env → พิมพ์เอง
+        cid = input("Client ID: ").strip()
+        csec = input("Client secret: ").strip()
     if not (cid and csec):
         print("ต้องใส่ทั้ง Client ID และ secret"); return
 
@@ -95,8 +118,11 @@ def main():
     print("\nเปิดเบราว์เซอร์ให้อนุญาต... (ถ้าไม่เปิดเอง ก็อปลิงก์นี้ไปเปิด)\n" + auth_url + "\n")
     webbrowser.open(auth_url)
 
-    while not (_code.get("code") or _code.get("error")):
-        pass
+    import time
+    for _ in range(600):  # รอสูงสุด ~5 นาที ให้กด Allow
+        if _code.get("code") or _code.get("error"):
+            break
+        time.sleep(0.5)
     if _code.get("error") or not _code.get("code"):
         print("ล้มเหลว:", _code.get("error")); return
 
