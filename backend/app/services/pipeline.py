@@ -115,15 +115,25 @@ def publish_job(content_job_id: int) -> dict:
             if os.path.exists(cand):
                 reel_local = cand
         n = len(variants)
+        posted_media: set = set()   # กันอัปสื่อ "ตัวเดียวกัน" ซ้ำใน platform เดียว (YouTube ลบคลิปซ้ำ)
         for idx, v in enumerate(variants):
             _prog(sid, name, f"📤 โพสต์ {v.platform} {v.label}", 90 + int(idx / n * 9), detail=f"{idx + 1}/{n}")
-            # โพสต์จริง: สุ่มหน่วงเวลาระหว่างโพสต์ กัน spam detection
-            if idx and settings.enable_post_delay:
-                time.sleep(random.uniform(settings.post_delay_min, settings.post_delay_max) * 60)
             store = s.get(Store, v.store_id)
             media = v.media_path
             if v.platform == "youtube" and reel_local and not _is_video_file(media):
                 media = reel_local        # YouTube ต้องวีดีโอ → ใช้ reel แทนภาพ
+            # ข้ามถ้าสื่อ+platform ซ้ำกับที่โพสต์ไปแล้วในรอบนี้ (กัน duplicate → โดน platform ลบ)
+            mkey = (v.platform, os.path.basename(media) if media else "")
+            if mkey in posted_media:
+                _prog(sid, name, f"⏭️ ข้าม {v.platform} {v.label} (สื่อซ้ำ)", 90 + int((idx + 1) / n * 9))
+                posted.append({"platform": v.platform, "label": v.label, "ok": False,
+                               "method": "skip", "account": "", "external_id": "",
+                               "error": "ข้ามสื่อซ้ำ (กัน duplicate)", "comment": ""})
+                continue
+            posted_media.add(mkey)
+            # โพสต์จริง: สุ่มหน่วงเวลาระหว่างโพสต์ กัน spam detection
+            if idx and settings.enable_post_delay:
+                time.sleep(random.uniform(settings.post_delay_min, settings.post_delay_max) * 60)
             res = social.publish(v.platform, v.caption, media, title=v.video_title)
             _prog(sid, name, f"{'✅' if res['ok'] else '⚠️'} {v.platform} {v.label}",
                   90 + int((idx + 1) / n * 9), detail=("สำเร็จ" if res["ok"] else "ไม่สำเร็จ"))
