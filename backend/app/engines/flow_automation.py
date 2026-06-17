@@ -144,6 +144,11 @@ def generate_video_flow(prompt: str) -> str:
                     body = page.evaluate("() => document.body.innerText")
                     if any(k in body for k in ["เกินโควตา", "เครดิตไม่เพียงพอ", "เครดิต AI เพิ่มเติม",
                                                "insufficient", "quota", "out of credit"]):
+                        try:
+                            from ..services import system_state
+                            system_state.set_flow_blocked()   # พัก Flow ไม่ยิงซ้ำ
+                        except Exception:
+                            pass
                         raise RuntimeError("เครดิต/โควตา Google Flow หมด — รอรีเซ็ต หรือเติมเครดิต (ดู labs.google/flow)")
                 except RuntimeError:
                     raise

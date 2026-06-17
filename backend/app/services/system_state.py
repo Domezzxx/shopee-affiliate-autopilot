@@ -39,6 +39,37 @@ def is_enabled() -> bool:
     return bool(get_state().get("enabled", True))
 
 
+def set_flow_blocked(hours: float | None = None) -> None:
+    """พัก Flow video เมื่อเครดิต/โควตาหมด — เก็บเวลาเลิกบล็อก."""
+    import time
+    h = hours if hours is not None else settings.flow_block_hours
+    st = get_state()
+    st["flow_blocked_until"] = time.time() + h * 3600
+    os.makedirs(settings.data_dir, exist_ok=True)
+    with open(_state_file(), "w", encoding="utf-8") as f:
+        json.dump(st, f, ensure_ascii=False)
+
+
+def flow_blocked() -> bool:
+    """Flow ถูกพักอยู่ไหม (เครดิตหมด) — ถ้าใช่ ข้าม Flow ไป fallback."""
+    import time
+    return get_state().get("flow_blocked_until", 0) > time.time()
+
+
+def autopilot_on() -> bool:
+    """auto-pilot เปิดไหม (ประมวลผลร้านใหม่เองตามรอบ)."""
+    return bool(get_state().get("autopilot", settings.autopilot_enabled))
+
+
+def set_autopilot(on: bool) -> dict:
+    st = get_state()
+    st["autopilot"] = bool(on)
+    os.makedirs(settings.data_dir, exist_ok=True)
+    with open(_state_file(), "w", encoding="utf-8") as f:
+        json.dump(st, f, ensure_ascii=False)
+    return st
+
+
 def _chrome_flow_ready() -> bool:
     """Chrome remote-debugging (9222) เปิดอยู่ไหม — จำเป็นสำหรับ Flow video."""
     try:
@@ -53,6 +84,8 @@ def health() -> dict:
     """เช็คว่าส่วนต่างๆ พร้อมไหม — dashboard จะได้โชว์ ไม่ต้องเดา/ไล่ debug."""
     return {
         "enabled": is_enabled(),
+        "autopilot": autopilot_on(),                   # วงจรอัตโนมัติเปิดไหม
+        "flow_blocked": flow_blocked(),                # Flow พักอยู่ไหม (เครดิตหมด)
         "content_ai": settings.content_ready,          # Gemini/Claude เขียนได้
         "flow_chrome": _chrome_flow_ready(),           # Flow video (Chrome debug)
         "phone_devices": len(settings.phone_list),     # มือถือ phone farm

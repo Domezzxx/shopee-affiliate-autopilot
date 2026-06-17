@@ -204,6 +204,13 @@ def system_toggle(enable: bool):
     return {"enabled": st["enabled"]}
 
 
+@router.post("/system/autopilot")
+def system_autopilot(enable: bool):
+    """เปิด/ปิด Auto-Pilot — ประมวลผลร้านใหม่เองตามรอบ (ต้องเปิดระบบหลักด้วย)."""
+    st = system_state.set_autopilot(enable)
+    return {"autopilot": st["autopilot"]}
+
+
 @router.post("/run-all")
 def run_all(background: BackgroundTasks, limit: int = 20):
     """ยิงครบวงทุกร้านสถานะ new (รันเรียงทีละร้านใน task เดียว กัน lock + rate limit)."""
@@ -369,6 +376,41 @@ def abtest(store_id: int):
 @router.post("/auto-optimize")
 def run_optimize():
     return pipeline.auto_optimize()
+
+
+# ----------------------------------------------------------------- รายงานสรุป (Sprint 6 P3)
+@router.get("/report/daily")
+def report_daily():
+    """รายงานสรุป: ร้าน/โพสต์/CTR/รายได้ + ผู้ชนะ A/B ต่อร้าน."""
+    with get_session() as s:
+        stores = s.exec(select(Store)).all()
+        posts = s.exec(select(Post)).all()
+        metrics = s.exec(select(Metric)).all()
+        jobs = s.exec(select(ContentJob)).all()
+    imp = sum(m.impressions for m in metrics)
+    clk = sum(m.clicks for m in metrics)
+    winners = []
+    for st in stores:
+        if st.status != "active":
+            continue
+        ab = pipeline.abtest_result(st.id)
+        for plat, v in ab.get("verdict", {}).items():
+            if v.get("winner"):
+                winners.append({"store": st.name, "platform": plat,
+                                "winner": v["winner"], "lift": v["lift"]})
+    return {
+        "stores_total": len(stores),
+        "stores_active": sum(1 for x in stores if x.status == "active"),
+        "stores_paused": sum(1 for x in stores if x.status == "paused"),
+        "posts_total": len(posts),
+        "posts_ok": sum(1 for p in posts if p.status == "posted"),
+        "posts_failed": sum(1 for p in posts if p.status == "failed"),
+        "impressions": imp, "clicks": clk,
+        "ctr": round(clk / imp, 4) if imp else 0.0,
+        "revenue_baht": round(clk * settings.affiliate_commission_per_click, 2),
+        "content_cost_baht": round(sum(j.cost_baht for j in jobs), 2),
+        "ab_winners": winners[:20],
+    }
 
 
 # ----------------------------------------------------------------- preflight (Sprint 3)

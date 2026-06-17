@@ -31,6 +31,31 @@ STATIC = os.path.join(os.path.dirname(__file__), "static")
 async def _startup():
     init_db()
     asyncio.create_task(_auto_optimize_loop())
+    asyncio.create_task(_autopilot_loop())
+
+
+async def _autopilot_loop():
+    """Auto-Pilot (Sprint 6 P2): ประมวลผลร้าน 'new' เองตามรอบ เมื่อเปิดระบบ + autopilot."""
+    from .services import system_state
+    from .db import Store, get_session
+    from sqlmodel import select
+    while True:
+        await asyncio.sleep(max(60, settings.autopilot_interval_min * 60))
+        if not (system_state.is_enabled() and system_state.autopilot_on()):
+            continue
+        try:
+            with get_session() as s:
+                ids = [r.id for r in s.exec(
+                    select(Store).where(Store.status == "new").limit(settings.autopilot_batch)).all()]
+            if ids:
+                print(f"[autopilot] ประมวลผล {len(ids)} ร้านอัตโนมัติ: {ids}")
+                for sid in ids:
+                    try:
+                        pipeline.run_full(sid)
+                    except Exception as e:  # pragma: no cover
+                        print(f"[autopilot] store {sid}: {e}")
+        except Exception as e:  # pragma: no cover
+            print(f"[autopilot] {e}")
 
 
 async def _auto_optimize_loop():
