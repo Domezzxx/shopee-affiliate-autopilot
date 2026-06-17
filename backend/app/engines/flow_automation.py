@@ -96,51 +96,26 @@ def generate_video_flow(prompt: str) -> str:
         existing_names = {_media_name(s) for s in existing_srcs if _media_name(s)}
         print(f"[flow-auto] วีดีโอเดิมในโปรเจกต์: {len(existing_names)} ตัว")
 
-        # 5) ปุ่ม Generate = ปุ่ม "สร้าง" ที่ visible + enabled (พิมพ์แล้วปุ่มจะ enable)
-        btns = page.get_by_role("button").filter(has_text="สร้าง")
-        gen_btn = None
-        for _ in range(12):   # รอจนมีปุ่มที่ enabled (หลังพิมพ์)
-            for i in range(btns.count()):
-                btn = btns.nth(i)
-                try:
-                    if btn.is_visible() and btn.get_attribute("aria-disabled") != "true":
-                        gen_btn = btn; break
-                except Exception:
-                    continue
-            if gen_btn:
-                break
-            time.sleep(0.5)
-        if not gen_btn:
-            raise RuntimeError("ไม่พบปุ่ม สร้าง ที่ enabled (prompt อาจไม่ติดในช่อง)")
-        print("[flow-auto] คลิกปุ่ม สร้าง (Generate)...")
-        gen_btn.click()
-        time.sleep(2)
+        # 5) ส่งด้วย Enter (ทดสอบแล้วว่าช่องเคลียร์ = ส่งสำเร็จ — ปุ่มต่างๆ ไม่ trigger generate จริง)
+        print("[flow-auto] ส่ง prompt (Enter)...")
+        page.keyboard.press("Enter")
+        time.sleep(3)
 
-        # 6) Wait for and click Approve button (อนุมัติ)
-        # Google Flow presents the generated video in the sidebar and requires approval.
-        print("[flow-auto] Waiting for Approve button...")
-        approve_selectors = [
-            "div:has-text('อนุมัติ ไม่ต้องถามอีก')",
-            "div:has-text('อนุมัติ')",
-            "div:has-text('Approve')",
-            "button:has-text('อนุมัติ')",
-            "button:has-text('Approve')"
-        ]
-        
-        approved = False
-        # Poll for approve button (up to 4 minutes)
-        for _ in range(48):
-            for sel in approve_selectors:
-                el = page.locator(sel).first
-                if el.is_visible():
-                    print(f"[flow-auto] Found Approve button: '{sel}'. Clicking...")
-                    el.click()
-                    approved = True
-                    break
-            if approved:
+        # 6) จัดการ Approve ถ้ามี (โผล่บางครั้ง — เช็คเร็วๆ ไม่บล็อก)
+        for _ in range(4):
+            clicked = False
+            for sel in ["div:has-text('อนุมัติ ไม่ต้องถามอีก')", "div:has-text('อนุมัติ')",
+                        "button:has-text('อนุมัติ')", "button:has-text('Approve')"]:
+                try:
+                    el = page.locator(sel).first
+                    if el.is_visible():
+                        el.click(); clicked = True; print("[flow-auto] คลิก Approve"); break
+                except Exception:
+                    pass
+            if clicked:
                 break
-            time.sleep(5)
-            
+            time.sleep(1.5)
+
         # 7) รอวีดีโอ "ใหม่" (src ไม่ซ้ำของเดิม) — กันบั๊กหยิบวีดีโอเก่าตัวแรกมา
         print("[flow-auto] Waiting for NEW video to generate (up to ~6 นาที)...")
         video_url = ""
@@ -163,6 +138,17 @@ def generate_video_flow(prompt: str) -> str:
             if new:
                 video_url = new[-1]
                 break
+            # ตรวจจับข้อความล้มเหลว/เครดิตหมด ของ Flow assistant → fail เร็ว บอกสาเหตุชัด
+            if i % 4 == 0:
+                try:
+                    body = page.evaluate("() => document.body.innerText")
+                    if any(k in body for k in ["เกินโควตา", "เครดิตไม่เพียงพอ", "เครดิต AI เพิ่มเติม",
+                                               "insufficient", "quota", "out of credit"]):
+                        raise RuntimeError("เครดิต/โควตา Google Flow หมด — รอรีเซ็ต หรือเติมเครดิต (ดู labs.google/flow)")
+                except RuntimeError:
+                    raise
+                except Exception:
+                    pass
             if i % 15 == 0:    # log ทุก ~30 วิ ให้รู้ว่ายังรออยู่
                 print(f"[flow-auto] ...รอวีดีโอใหม่ (มีในจอ {len(srcs)} ตัว, ยังไม่มีตัวใหม่) {i*2}s")
             time.sleep(2)
