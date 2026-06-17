@@ -42,7 +42,8 @@ def generate_for_store(store_id: int) -> dict:
             mtype, mpath, ipath = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"])
             s.add(Variant(
                 content_job_id=job.id, store_id=store.id, label=v["label"],
-                platform=v["platform"], hook=v["hook"], caption=v["caption"],
+                platform=v["platform"], hook=v["hook"],
+                video_title=v.get("video_title", ""), caption=v["caption"],
                 hashtags_json=json.dumps(v["hashtags"], ensure_ascii=False),
                 cta=v["cta"], first_comment=v.get("first_comment", ""),
                 voiceover_script=v["voiceover_script"],
@@ -68,7 +69,7 @@ def publish_job(content_job_id: int) -> dict:
             if idx and settings.enable_post_delay:
                 time.sleep(random.uniform(settings.post_delay_min, settings.post_delay_max) * 60)
             store = s.get(Store, v.store_id)
-            res = social.publish(v.platform, v.caption, v.media_path)
+            res = social.publish(v.platform, v.caption, v.media_path, title=v.video_title)
             p = Post(
                 variant_id=v.id, store_id=v.store_id, platform=v.platform,
                 method=res["method"], account=res["account"],

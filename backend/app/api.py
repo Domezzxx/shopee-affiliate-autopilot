@@ -184,7 +184,7 @@ def get_content(store_id: int):
                       "schedule": jloads(j.schedule_json, []), "cost_baht": j.cost_baht,
                       "model": j.model_used} for j in jobs],
             "variants": [{"id": v.id, "label": v.label, "platform": v.platform,
-                          "hook": v.hook, "caption": v.caption, "cta": v.cta,
+                          "hook": v.hook, "video_title": v.video_title, "caption": v.caption, "cta": v.cta,
                           "first_comment": (v.first_comment or "").replace("{LINK}", link),
                           "hashtags": jloads(v.hashtags_json, []),
                           "media_type": v.media_type,

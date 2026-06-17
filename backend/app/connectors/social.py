@@ -124,8 +124,21 @@ def _yt_access_token() -> str:
     return r.json()["access_token"]
 
 
-def _post_youtube(caption: str, media_path: str) -> dict:
-    """อัปโหลด YouTube Shorts — OAuth refresh → resumable upload (videos.insert)."""
+def _viral_title(title: str, caption: str) -> str:
+    """ชื่อคลิปไวรัล: ใช้ video_title จาก AI ก่อน, ไม่มีก็ดึงบรรทัดแรกของแคปชั่น + เติม #Shorts."""
+    base = (title or "").strip()
+    if not base:
+        # fallback: บรรทัดแรกที่มีเนื้อหาของแคปชั่น (= hook)
+        base = next((ln.strip() for ln in (caption or "").splitlines() if ln.strip()), "อร่อยบอกต่อ")
+    base = base[:88]
+    if "#shorts" not in base.lower():
+        base = f"{base} #Shorts"
+    return base[:100]   # YouTube จำกัดชื่อ 100 ตัวอักษร
+
+
+def _post_youtube(caption: str, media_path: str, title: str = "") -> dict:
+    """อัปโหลด YouTube Shorts — OAuth refresh → resumable upload (videos.insert).
+    title = ชื่อคลิปไวรัล (จาก AI video_title); ว่าง → fallback จากแคปชั่น."""
     if not settings.youtube_refresh_token:
         return {"ok": True, "method": "api", "account": "mock_yt",
                 "external_id": f"yt_{uuid.uuid4().hex[:10]}", "error": ""}
@@ -134,8 +147,8 @@ def _post_youtube(caption: str, media_path: str) -> dict:
                 "error": "YouTube ต้องไฟล์วีดีโอ (ตั้ง VIDEO_MODE=ffmpeg)"}
     try:
         token = _yt_access_token()
-        title = ((caption.split("\n")[0] or "อร่อยบอกต่อ")[:90]) + " #Shorts"
-        meta = {"snippet": {"title": title, "description": caption + "\n\n#Shorts"},
+        vtitle = _viral_title(title, caption)
+        meta = {"snippet": {"title": vtitle, "description": caption + "\n\n#Shorts"},
                 "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}}
         size = os.path.getsize(media_path)
         with httpx.Client(timeout=600) as c:
@@ -280,12 +293,15 @@ def _post_phone(platform: str, caption: str, media_path: str) -> dict:
 
 
 # ----------------------------------------------------------- entry points
-def publish(platform: str, caption: str, media_path: str) -> dict:
-    """โพสต์คอนเทนต์ — Hybrid routing ตาม POSTING_MODE."""
+def publish(platform: str, caption: str, media_path: str, title: str = "") -> dict:
+    """โพสต์คอนเทนต์ — Hybrid routing ตาม POSTING_MODE. title = ชื่อคลิปไวรัล (ใช้กับ YouTube)."""
     mode = settings.posting_mode
     if mode == "phone":
         return _post_phone(platform, caption, media_path)
-    res = _API[platform](caption, media_path)
+    if platform == "youtube":
+        res = _post_youtube(caption, media_path, title)
+    else:
+        res = _API[platform](caption, media_path)
     if not res["ok"] and mode == "hybrid":
         return _post_phone(platform, caption, media_path)   # API พลาด → phone farm
     return res
