@@ -19,6 +19,51 @@ def generate_video_flow(prompt: str) -> str:
     """
     print(f"[flow-auto] Starting Google Flow video generation for prompt: {prompt}")
     
+    # Check if port 9222 is open, if not, attempt to launch Chrome automatically
+    import socket
+    import subprocess
+    
+    def is_port_open(port: int) -> bool:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1.0)
+                s.connect(("127.0.0.1", port))
+                return True
+        except Exception:
+            return False
+            
+    if not is_port_open(9222):
+        print("[flow-auto] Remote debugging port 9222 is closed. Attempting to auto-launch Chrome...")
+        chrome_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            os.path.join(os.environ.get("LOCALAPPDATA", ""), r"Google\Chrome\Application\chrome.exe")
+        ]
+        chrome_exe = next((p for p in chrome_paths if os.path.exists(p)), None)
+        if chrome_exe:
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            profile_dir = os.path.join(project_root, "data", "chrome_profile")
+            os.makedirs(profile_dir, exist_ok=True)
+            
+            args = [
+                chrome_exe,
+                "--remote-debugging-port=9222",
+                f"--user-data-dir={profile_dir}",
+                "--no-first-run",
+                "https://labs.google/fx/tools/flow"
+            ]
+            flags = 0x00000008 if os.name == 'nt' else 0
+            try:
+                subprocess.Popen(args, creationflags=flags)
+                print("[flow-auto] Launched Chrome process. Waiting for port 9222 to open...")
+                for _ in range(8):
+                    time.sleep(1)
+                    if is_port_open(9222):
+                        print("[flow-auto] Chrome remote debugging port 9222 successfully opened.")
+                        break
+            except Exception as launch_err:
+                print(f"[flow-auto] Failed to auto-launch Chrome process: {launch_err}")
+
     # 1) Connect to Chrome CDP
     pw = sync_playwright().start()
     try:
