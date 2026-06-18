@@ -10,13 +10,22 @@
   <header>
     <div class="brand">🍜 Affiliate Autopilot <span class="tag">Shopee Food</span></div>
     <div class="actions">
-      <button id="btn-system" class="sys" title="เปิด/ปิดระบบอัตโนมัติ">● ระบบ</button>
-      <button id="btn-autopilot" class="sys" title="Auto-Pilot: ประมวลผลร้านใหม่เองตามรอบ">🤖 Auto</button>
-      <button id="btn-add" class="go">+ เพิ่มร้าน</button>
-      <button id="btn-runall" class="primary">▶ รันครบวงทุกร้านใหม่</button>
-      <button id="btn-sim">🎲 จำลองผล (เดโม)</button>
-      <button id="btn-opt">⚙ Auto-optimize</button>
-      <button id="btn-preflight">🚦 เช็คพร้อมโพสต์</button>
+      <div class="act-group primary-actions">
+        <button id="btn-system" class="sys" title="เปิด/ปิดระบบอัตโนมัติ">● ระบบ</button>
+        <button id="btn-autopilot" class="sys" title="Auto-Pilot: ประมวลผลร้านใหม่เองตามรอบ">🤖 Auto</button>
+        <button id="btn-connection" style="background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600;" title="ตั้งค่าเชื่อมต่อ API">🔗 เชื่อมต่อ API</button>
+        <button id="btn-scrape" class="go" title="ดึงสินค้า Shopee ตามคำค้นใน .env">🔍 ดึงสินค้า</button>
+        <button id="btn-add" class="go">+ เพิ่มร้าน</button>
+        <button id="btn-runall" class="primary">▶ รันครบวง</button>
+      </div>
+      <details class="more-menu">
+        <summary>เครื่องมือ ▾</summary>
+        <div class="more-panel">
+          <button id="btn-preflight">🚦 เช็คพร้อมโพสต์</button>
+          <button id="btn-opt">⚙ Auto-optimize</button>
+          <button id="btn-sim">🎲 จำลองผล (เดโม)</button>
+        </div>
+      </details>
     </div>
   </header>
 
@@ -43,6 +52,21 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="modal-title">รายละเอียด</h3>
+        <button class="modal-close" data-close aria-label="ปิด">✕</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+      <div class="modal-foot">
+        <button class="primary" data-close>ปิด</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/app.js"></script>
 </body>
 </html>

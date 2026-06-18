@@ -1,7 +1,23 @@
 // Affiliate Autopilot — dashboard (vanilla JS, ไม่มี build step)
 const $ = (s) => document.querySelector(s);
+
+let backendUrl = localStorage.getItem("backend_url") || "";
+if (backendUrl && backendUrl.endsWith("/")) {
+  backendUrl = backendUrl.slice(0, -1);
+}
+
+const getApiUrl = (path) => {
+  return (backendUrl ? backendUrl : "") + "/api" + path;
+};
+
+const getMediaUrl = (url) => {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return (backendUrl ? backendUrl : "") + url;
+};
+
 const api = async (path, opts) => {
-  const r = await fetch("/api" + path, opts);
+  const r = await fetch(getApiUrl(path), opts);
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
   return r.json();
 };
@@ -136,14 +152,25 @@ $("#btn-system").onclick = async () => {
 
 // ---------------- banner (real vs mock)
 async function loadBanner() {
-  const k = await api("/keys/status");
-  if (k.real_mode) {
-    const brain = k.content_provider === "gemini" ? "Gemini (ฟรี)" : "Claude";
-    $("#banner").innerHTML = `<div class="banner real">🟢 REAL MODE — เขียนด้วย ${brain} · ภาพ Gemini${k.meta ? " · Meta พร้อม" : ""} · โพสต์: ${k.posting_mode}</div>`;
-  } else if (k.content_provider === "gemini") {
-    $("#banner").innerHTML = `<div class="banner mock">🟡 โหมด MOCK — ใส่ <b>GEMINI_API_KEY</b> (ฟรี) ใน .env แล้วรัน run_local.ps1 ใหม่ → ทดสอบจริงฟรี ฿0</div>`;
-  } else {
-    $("#banner").innerHTML = `<div class="banner mock">🟡 โหมด MOCK — อยากทดสอบฟรี: ตั้ง <b>CONTENT_PROVIDER=gemini</b> + ใส่ <b>GEMINI_API_KEY</b> ใน .env (ไม่ต้องใช้ Claude)</div>`;
+  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.startsWith("192.168.");
+  try {
+    const k = await api("/keys/status");
+    const suffix = backendUrl ? " (ผ่าน Tunnel)" : "";
+    if (k.real_mode) {
+      const brain = k.content_provider === "gemini" ? "Gemini (ฟรี)" : "Claude";
+      $("#banner").innerHTML = `<div class="banner real">🟢 REAL MODE — เขียนด้วย ${brain} · ภาพ Gemini${k.meta ? " · Meta พร้อม" : ""} · โพสต์: ${k.posting_mode}${suffix}</div>`;
+    } else if (k.content_provider === "gemini") {
+      $("#banner").innerHTML = `<div class="banner mock">🟡 โหมด MOCK — ใส่ <b>GEMINI_API_KEY</b> (ฟรี) ใน .env แล้วรัน run_local.ps1 ใหม่ → ทดสอบจริงฟรี ฿0${suffix}</div>`;
+    } else {
+      $("#banner").innerHTML = `<div class="banner mock">🟡 โหมด MOCK — อยากทดสอบฟรี: ตั้ง <b>CONTENT_PROVIDER=gemini</b> + ใส่ <b>GEMINI_API_KEY</b> ใน .env (ไม่ต้องใช้ Claude)${suffix}</div>`;
+    }
+  } catch (e) {
+    if (!isLocal && !backendUrl) {
+      $("#banner").innerHTML = `<div class="banner mock" style="background:#3a1a1a; border-color:var(--accent); color:#fff; font-weight:600;">⚠️ <b>ยังไม่ได้เชื่อมต่อ API:</b> กรุณากดปุ่ม <b>"🔗 เชื่อมต่อ API"</b> ด้านบน เพื่อใส่ URL ของ Cloudflare Tunnel ที่รันจากเครื่อง Local ของคุณ</div>`;
+    } else {
+      $("#banner").innerHTML = `<div class="banner mock" style="background:#3a1a1a; border-color:var(--accent); color:#fff; font-weight:600;">🔴 <b>ไม่สามารถเชื่อมต่อกับ API Backend ได้:</b> (${backendUrl || "Local"}) — เช็คการรันบอทหรือ Cloudflare Tunnel ของคุณ</div>`;
+    }
+    throw e;
   }
 }
 
@@ -312,13 +339,13 @@ async function renderContent() {
         </span></div>
       ${isPending ? `<div class="banner mock" style="margin:8px 0 12px 0">⏳ คอนเทนต์ผลิตเสร็จแล้ว กำลังรอคุณอนุมัติเพื่อยิงโพสต์ออกไปยังแพลตฟอร์มต่าง ๆ</div>` : ""}
       ${c.reel_url ? `<div class="reelwrap"><div class="meta" style="margin-bottom:4px">คลิปรวม (montage) — โพสต์ได้เลย</div>
-        <video class="reel" src="${c.reel_url}" controls loop playsinline></video></div>` : ""}
+        <video class="reel" src="${getMediaUrl(c.reel_url)}" controls loop playsinline></video></div>` : ""}
       <div class="preview">${c.variants.map((v) => `
         <div class="v">
           ${!v.media_url ? '<div class="media"></div>'
             : v.media_type === "video"
-              ? `<video class="media" src="${v.media_url}" muted loop playsinline controls></video>`
-              : `<img class="media" src="${v.media_url}" />`}
+              ? `<video class="media" src="${getMediaUrl(v.media_url)}" muted loop playsinline controls></video>`
+              : `<img class="media" src="${getMediaUrl(v.media_url)}" />`}
           <div class="meta"><b>${v.platform}·${v.label}</b>${v.media_type === "video" ? ' <span class="chip posted">วีดีโอ</span>' : ""}</div>
           <div style="font-size:12px">${esc(v.hook)}</div>
           ${v.first_comment ? `<div class="fc">💬 ${esc(v.first_comment)}</div>` : ""}
@@ -409,10 +436,74 @@ function render(tab) {
      platform: renderPlatform, report: renderReport, flow: renderFlow }[tab] || (() => {}))();
 }
 async function loadAll() {
+  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.startsWith("192.168.");
+  if (!isLocal && !backendUrl) {
+    loadBanner().catch(() => {});
+    return;
+  }
   await Promise.all([loadSystem().catch(() => {}), loadBanner().catch(() => {}), loadKpis().catch((e) => toast(e.message, true))]);
   const active = document.querySelector(".tabs button.active").dataset.tab;
   render(active);
 }
+
+// Highlight connection button if connected
+if (backendUrl) {
+  const btn = $("#btn-connection");
+  if (btn) {
+    btn.style.background = "var(--accent2)";
+    btn.style.borderColor = "var(--accent2)";
+    btn.style.color = "#08130d";
+    btn.title = "เชื่อมต่อ API: " + backendUrl + " (คลิกเพื่อแก้ไข)";
+  }
+}
+
+$("#btn-connection").onclick = () => {
+  const current = localStorage.getItem("backend_url") || "";
+  const val = prompt("ป้อน URL สำหรับเชื่อมต่อ API เครื่อง Local ของคุณ (เช่น https://xxxx.trycloudflare.com หรือ http://127.0.0.1:8088)\n(ปล่อยว่างเพื่อใช้โหมด Relative/Local ปกติ):", current);
+  if (val !== null) {
+    const trimmed = val.trim();
+    if (trimmed) {
+      localStorage.setItem("backend_url", trimmed);
+      toast("เชื่อมต่อ API ไปที่: " + trimmed);
+    } else {
+      localStorage.removeItem("backend_url");
+      toast("รีเซ็ตการเชื่อมต่อเป็นแบบ Local");
+    }
+    setTimeout(() => location.reload(), 1000);
+  }
+};
+
+const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.startsWith("192.168.");
 loadAll();
-startProgress();   // เผื่อมีงานสร้างคลิปค้างอยู่ตอนเปิด/รีเฟรชหน้า
-setInterval(loadKpis, 15000);
+if (isLocal || backendUrl) {
+  startProgress();
+  setInterval(loadKpis, 15000);
+}
+
+// ===== Modal helpers =====
+function showModal(title, html) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal').classList.remove('hidden');
+}
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+}
+document.getElementById('modal').addEventListener('click', (e) => {
+  if (e.target.dataset.close !== undefined) closeModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ===== Scrape button =====
+document.getElementById('btn-scrape').onclick = async () => {
+  try {
+    toast('????????????????? Shopee...');
+    const r = await api('/scrape', { method: 'POST' });
+    showModal('??????????????',
+      '<p>?????? <b>' + (r.fetched||0) + '</b> ?????? &nbsp;|&nbsp; ????????? <b class=\"ok\">' + (r.added||0) + '</b> &nbsp;|&nbsp; ???? <b class=\"dim\">' + (r.skipped||0) + '</b></p>'
+    );
+    loadAll();
+  } catch(e) { toast(e.message, true); }
+};
