@@ -156,7 +156,8 @@ def get_music(ff: str) -> str:
         files = [f for f in glob.glob(os.path.join(settings.music_dir, ext))
                  if "_default_bed" not in os.path.basename(f)]
         if files:
-            return sorted(files)[0]
+            import random
+            return random.choice(files)
     bed = os.path.join(settings.music_dir, "_default_bed.mp3")
     if os.path.exists(bed) and os.path.getsize(bed) > 1000:
         return bed
@@ -222,13 +223,24 @@ def _ass_t(sec: float) -> str:
 
 
 def _build_ass(segs: list[tuple[str, float, float]]) -> str:
+    import random
     out = os.path.join(settings.media_dir, f"_cap_{uuid.uuid4().hex[:8]}.ass")
+    # สุ่มขนาดฟอนต์และสีเพื่อหลีกเลี่ยงการซ้ำของคลื่นรูปแบบตัวอักษร
+    fsize = random.randint(82, 94)
+    colors = [
+        "&H00FFFFFF",  # ขาว
+        "&H00FFFFE0",  # เหลืองนวล
+        "&H00F5FFFA",  # เขียวมิ้นต์อ่อน
+        "&H00FFF0F5",  # ม่วงลาเวนเดอร์อ่อน
+        "&H00FFE4E1"   # ชมพูอ่อน
+    ]
+    pcolor = random.choice(colors)
     header = (
-        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 2\n\n"
-        "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, "
-        "BackColour, Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV\n"
-        "Style: Pop,Tahoma,88,&H00FFFFFF,&H00141414,&H96000000,1,1,6,3,2,60,60,560\n\n"
-        "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+        f"[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 2\n\n"
+        f"[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, "
+        f"BackColour, Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV\n"
+        f"Style: Pop,Tahoma,{fsize},{pcolor},&H00141414,&H96000000,1,1,6,3,2,60,60,560\n\n"
+        f"[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
     body = ""
     for text, start, end in segs:
@@ -330,7 +342,14 @@ def _mux_audio(ff: str, video: str, narr: str | None, ass: str | None, out: str,
             inputs += ["-i", narr]
             fc.append(f"[{idx}:a]volume=1.0[av]"); streams.append("[av]"); idx += 1
         if music:
-            inputs += ["-stream_loop", "-1", "-i", music]
+            import random
+            mdur = _duration(music)
+            if mdur > 10.0:
+                # สุ่มตำแหน่งเริ่มต้นของเพลงเพื่อแก้ปัญหา Audio Hash ซ้ำกัน
+                offset = round(random.uniform(0.0, mdur - 5.0), 2)
+                inputs += ["-stream_loop", "-1", "-ss", str(offset), "-i", music]
+            else:
+                inputs += ["-stream_loop", "-1", "-i", music]
             fc.append(f"[{idx}:a]volume={settings.music_volume}[am]"); streams.append("[am]"); idx += 1
         if amb:
             inputs += ["-stream_loop", "-1", "-i", amb]
@@ -391,7 +410,8 @@ def _concat_xfade(ff: str, clips: list[str], durs: list[float], silent: str,
         inputs += ["-i", c]
     fc, prev, acc = [], "[0:v]", durs[0]
     for i in range(1, len(clips)):
-        t = "fade" if i == len(clips) - 1 else _TRANS[(i - 1) % len(_TRANS)]
+        import random
+        t = "fade" if i == len(clips) - 1 else random.choice(_TRANS)
         off = max(0.05, acc - trans)
         lab = f"[x{i}]"
         fc.append(f"{prev}[{i}:v]xfade=transition={t}:duration={trans}:offset={off:.3f}{lab}")
@@ -421,13 +441,17 @@ def build_reel(scenes: list[tuple[str, str]], seconds_each: float | None = None,
     if not imgs:
         return None
     # ตัดเร็ว: วนภาพ ~5-8 ช็อต + ความเร็วแปรผันตามบีต (เร็ว-ช้าสลับ)
+    import random
     n = min(8, max(5, len(imgs) + 2))
-    beat = [0.72, 1.18, 0.82, 1.05]            # ตัวคูณความยาวต่อช็อต = จังหวะ
+    # สุ่มความยาวฉากเพื่อให้ระยะเวลาการตัดต่อของแต่ละคลิปไม่เหมือนกัน
+    beat = [round(random.uniform(0.65, 1.35), 2) for _ in range(n)]
     clips, durs = [], []
     for i in range(n):
         _cb(f"🎞️ เรนเดอร์ฉาก {i + 1}/{n}", 12 + int(i / n * 44))
-        si = round(sec * beat[i % len(beat)], 2)
-        c = _scene_clip(ff, imgs[i % len(imgs)], "", si, i, punch=True)
+        si = round(sec * beat[i], 2)
+        # สุ่มมุมมองการเคลื่อนไหวกล้อง (motion direction)
+        motion_idx = random.randint(0, 100)
+        c = _scene_clip(ff, imgs[i % len(imgs)], "", si, motion_idx, punch=True)
         if c:
             clips.append(c)
             durs.append(_duration(c) or si)
@@ -518,13 +542,16 @@ def build_review_reel(media_items: list[str], narration: str = "", voice: str | 
     has_cta = bool(cta_lines)
     budget = max(3.5, vdur - (cta_sec if has_cta else 0.0)) if vdur else sec * 5
 
+    import random
     # 2) เติมฉากจน "ยาวพอดีเสียง" (วนสื่อ) — นับความยาวจริงหลัง xfade
     clips, durs, i, acc = [], [], 0, 0.0
     while acc < budget and i < 16:
         src = items[i % len(items)]
-        si = round(sec * beat[i % len(beat)], 2)
-        c = (_video_clip(ff, src, max(1.4, si), i) if _is_video_file(src)
-             else _scene_clip(ff, src, "", si, i, punch=True))
+        # สุ่มจังหวะเวลาตัดต่อของวีดีโอรีวิวแต่ละตัว
+        si = round(sec * random.uniform(0.7, 1.35), 2)
+        motion_idx = random.randint(0, 100)
+        c = (_video_clip(ff, src, max(1.4, si), motion_idx) if _is_video_file(src)
+             else _scene_clip(ff, src, "", si, motion_idx, punch=True))
         if c:
             d = _duration(c) or si
             clips.append(c); durs.append(d)
@@ -582,17 +609,21 @@ def extract_frame(video_path: str) -> str | None:
     """ดึงเฟรมแรกของวีดีโอออกมาเป็นรูปภาพเพื่อใช้ทำคลิปรวม (montage) และ thumbnail."""
     if not video_path or not os.path.exists(video_path):
         return None
+    # หากอินพุตเป็นรูปภาพอยู่แล้ว ให้คืนค่ารูปภาพนั้นกลับไปตรงๆ
+    if video_path.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+        return video_path
+
     ff = find_ffmpeg()
     if not ff:
         return None
     out = video_path.rsplit(".", 1)[0] + "_thumb.png"
     # ดึงเฟรมแรกที่วินาทีที่ 0.5
     args = ["-ss", "0.5", "-i", video_path, "-vframes", "1", "-f", "image2", out]
-    if _run(ff, args):
+    if _run(ff, args) and os.path.exists(out) and os.path.getsize(out) > 0:
         return out
-    # หากล้มเหลวให้ลองที่วินาทีที่ 0.0
+    # หากล้มเหลว (เช่น คลิปสั้นกว่า 0.5 วิ) ให้ลองดึงที่วินาทีที่ 0.0
     args = ["-ss", "0.0", "-i", video_path, "-vframes", "1", "-f", "image2", out]
-    if _run(ff, args):
+    if _run(ff, args) and os.path.exists(out) and os.path.getsize(out) > 0:
         return out
     return None
 

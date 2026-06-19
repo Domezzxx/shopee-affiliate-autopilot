@@ -36,14 +36,15 @@ services:
       - DB_POSTGRESDB_DATABASE=n8n
       - DB_POSTGRESDB_USER=n8n
       - DB_POSTGRESDB_PASSWORD=n8n_pass
-      # backend อยู่ใน network เดียวกัน เรียกผ่านชื่อ service ได้เลย: http://backend:8088
-      - BACKEND_URL=http://backend:8088
+      # backend อยู่ในเครื่องโฮสต์ (รันแบบ native) เรียกผ่าน host.docker.internal
+      - BACKEND_URL=http://host.docker.internal:8088
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./n8n/workflows:/home/node/workflows   # import workflow จากที่นี่
       - n8n_data:/home/node/.n8n
     depends_on:
       - db
-      - backend
 
   db:
     image: postgres:16-alpine

@@ -1,0 +1,18 @@
+venv/
+.venv/
+data/
+tools/
+scripts/
+n8n/
+backend/app/connectors/
+backend/app/engines/
+backend/app/services/
+backend/app/main.py
+backend/app/api.py
+backend/app/config.py
+backend/app/db.py
+backend/requirements.txt
+backend/Dockerfile
+New folder/
+.git/
+.env

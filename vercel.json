@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/", "destination": "/backend/app/static/index.html" },
+    { "source": "/static/(.*)", "destination": "/backend/app/static/$1" }
+  ]
+}

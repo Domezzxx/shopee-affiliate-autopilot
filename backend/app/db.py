@@ -9,10 +9,16 @@ from sqlmodel import Field, SQLModel, Session, create_engine, select
 
 from .config import settings
 
-engine = create_engine(
-    f"sqlite:///{settings.data_dir}/affiliate.db",
-    connect_args={"check_same_thread": False},
-)
+if settings.database_url:
+    db_url = settings.database_url
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+    engine = create_engine(db_url)
+else:
+    engine = create_engine(
+        f"sqlite:///{settings.data_dir}/affiliate.db",
+        connect_args={"check_same_thread": False},
+    )
 
 
 # ---------------------------------------------------------------- models
@@ -101,18 +107,20 @@ class Metric(SQLModel, table=True):
 
 # ---------------------------------------------------------------- helpers
 def _migrate() -> None:
-    """เพิ่มคอลัมน์ใหม่ให้ DB เดิมที่มีข้อมูลอยู่แล้ว (SQLite ไม่ migrate ให้อัตโนมัติ)."""
+    """เพิ่มคอลัมน์ใหม่ให้ DB เดิมที่มีข้อมูลอยู่แล้ว (ยืดหยุ่นรองรับทั้ง SQLite และ PostgreSQL)."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
     new_cols = {
         "variant": [("first_comment", "TEXT DEFAULT ''"), ("image_path", "TEXT DEFAULT ''"),
                     ("video_title", "TEXT DEFAULT ''")],
         "post": [("comment_id", "TEXT DEFAULT ''"), ("comment_status", "TEXT DEFAULT ''")],
-        "store": [("reel_url", "TEXT DEFAULT ''"), ("requires_approval", "BOOLEAN DEFAULT 0")],
+        "store": [("reel_url", "TEXT DEFAULT ''"), ("requires_approval", "BOOLEAN DEFAULT FALSE")],
     }
     with engine.begin() as conn:
         for table, cols in new_cols.items():
-            existing = {r[1] for r in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()}
+            columns = {c["name"] for c in inspector.get_columns(table)}
             for col, ddl in cols:
-                if col not in existing:
+                if col not in columns:
                     conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
 
 
@@ -121,10 +129,11 @@ def init_db() -> None:
     os.makedirs(settings.media_dir, exist_ok=True)
     SQLModel.metadata.create_all(engine)
     _migrate()
-    # WAL = อ่าน/เขียนพร้อมกันได้ดีขึ้น · busy_timeout = รอ lock แทน fail ทันที
-    with engine.begin() as conn:
-        conn.exec_driver_sql("PRAGMA journal_mode=WAL")
-        conn.exec_driver_sql("PRAGMA busy_timeout=5000")
+    # WAL = อ่าน/เขียนพร้อมกันได้ดีขึ้น · busy_timeout = รอ lock แทน fail ทันที (เฉพาะ SQLite)
+    if "sqlite" in str(engine.url):
+        with engine.begin() as conn:
+            conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+            conn.exec_driver_sql("PRAGMA busy_timeout=5000")
 
 
 def get_session() -> Session:

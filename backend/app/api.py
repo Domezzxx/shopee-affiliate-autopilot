@@ -191,6 +191,135 @@ def progress():
 
 
 # ----------------------------------------------------------------- เปิด/ปิดระบบ (master switch)
+def run_autopilot_once():
+    """รัน autopilot หนึ่งรอบทันที: ดึงร้านค้าจาก Shopee Food หากระบบไม่มีร้านสถานะ new และทำการประมวลผลทันที"""
+    from .services import shopee_scraper
+    if not (system_state.is_enabled() and system_state.autopilot_on()):
+        return
+    try:
+        with get_session() as s:
+            new_stores = s.exec(select(Store).where(Store.status == "new")).all()
+        if not new_stores:
+            print("[autopilot-immediate] ไม่พบร้านค้าใหม่ กำลังดึงร้านค้าจาก Shopee อัตโนมัติ...")
+            try:
+                res = shopee_scraper.scrape()
+                if not res.get("error") and res.get("stores"):
+                    stores_in = [StoreIn(**st) for st in res["stores"]]
+                    ing_res = ingest(IngestIn(stores=stores_in))
+                    print(f"[autopilot-immediate] ดึงร้านค้าและกรองสำเร็จ: {ing_res}")
+                else:
+                    print(f"[autopilot-immediate] ดึงร้านค้าไม่สำเร็จหรือไม่มีร้านใหม่: {res.get('error')}")
+            except Exception as e:
+                print(f"[autopilot-immediate] เกิดข้อผิดพลาดขณะดึงร้านค้า: {e}")
+            with get_session() as s:
+                new_stores = s.exec(select(Store).where(Store.status == "new")).all()
+        if new_stores:
+            batch = new_stores[:settings.autopilot_batch]
+            ids = [st.id for st in batch]
+            print(f"[autopilot-immediate] กำลังเริ่มประมวลผล {len(ids)} ร้านอัตโนมัติ: {[st.name for st in batch]}")
+            for sid in ids:
+                try:
+                    pipeline.run_full(sid)
+                except Exception as e:
+                    print(f"[autopilot-immediate] เกิดข้อผิดพลาดขณะรันร้าน {sid}: {e}")
+        else:
+            print("[autopilot-immediate] ไม่มีร้านใหม่ให้ประมวลผลในรอบนี้")
+    except Exception as e:
+        print(f"[autopilot-immediate] error: {e}")
+
+
+def scrape_and_run_all_seq(limit: int):
+    """ดึงข้อมูลร้านจาก Shopee ก่อนแล้วรันครบวงเรียงลำดับร้านค้าใหม่ที่กรองเข้ามา"""
+    from .services import shopee_scraper
+    try:
+        res = shopee_scraper.scrape()
+        if not res.get("error") and res.get("stores"):
+            stores_in = [StoreIn(**st) for st in res["stores"]]
+            ing_res = ingest(IngestIn(stores=stores_in))
+            print(f"[run-all-auto-scrape] ดึงร้านค้าสำเร็จ: {ing_res}")
+            with get_session() as s:
+                ids = [r.id for r in s.exec(
+                    select(Store).where(Store.status == "new").limit(limit)).all()]
+            if ids:
+                _run_all_seq(ids)
+            else:
+                print("[run-all-auto-scrape] ไม่พบร้านค้าใหม่หลังผ่านเกณฑ์การกรอง")
+        else:
+            print(f"[run-all-auto-scrape] ดึงร้านค้าล้มเหลว: {res.get('error')}")
+    except Exception as e:
+        print(f"[run-all-auto-scrape] error: {e}")
+
+
+@router.post("/chrome/open")
+def open_chrome_endpoint():
+    """เปิดเบราว์เซอร์ Chrome debug ในเครื่อง local ของผู้ใช้อัตโนมัติ (ไม่ต้องรันคำสั่ง terminal เอง)"""
+    import socket
+    import subprocess
+    import os
+    import time
+    
+    def is_port_open(port: int) -> bool:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1.0)
+                s.connect(("127.0.0.1", port))
+                return True
+        except Exception:
+            return False
+            
+    if is_port_open(9222):
+        return {"status": "already_open", "message": "เปิด Google Flow (port 9222) อยู่แล้ว"}
+        
+    chrome_paths = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), r"Google\Chrome\Application\chrome.exe")
+    ]
+    chrome_exe = next((p for p in chrome_paths if os.path.exists(p)), None)
+    if not chrome_exe:
+        raise HTTPException(status_code=500, detail="ไม่พบ Google Chrome ในเครื่องของคุณ กรุณาติดตั้ง Chrome หรือตรวจสอบโฟลเดอร์ติดตั้ง")
+        
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    profile_dir = os.path.join(project_root, "data", "chrome_profile")
+    os.makedirs(profile_dir, exist_ok=True)
+    
+    args = [
+        chrome_exe,
+        "--remote-debugging-port=9222",
+        f"--user-data-dir={profile_dir}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-background-networking",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+        "--disable-sync",
+        "--disable-client-side-phishing-detection",
+        "--disable-default-apps",
+        "--disable-component-update",
+        "--disable-hang-monitor",
+        "--disable-popup-blocking",
+        "--disable-prompt-on-repost",
+        "--disable-logging",
+        "--metrics-recording-only",
+        "--disable-gpu-shader-disk-cache",
+        "--disable-dev-shm-usage",
+        "--disable-extensions",
+        "--disable-features=Translate,BackForwardCache,CalculateNativeWinOcclusion,InterestFeedContentSuggestion",
+        "https://labs.google/fx/tools/flow"
+    ]
+    flags = 0x00000008 if os.name == 'nt' else 0
+    try:
+        subprocess.Popen(args, creationflags=flags)
+        for _ in range(5):
+            time.sleep(1)
+            if is_port_open(9222):
+                return {"status": "launched", "message": "เปิด Chrome สำหรับบอทสำเร็จแล้ว"}
+        return {"status": "launching", "message": "กำลังเปิดเบราว์เซอร์ Chrome บอท..."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ไม่สามารถเปิดเบราว์เซอร์ได้: {e}")
+
+
 @router.get("/system")
 def system_status():
     """สถานะระบบ — เปิด/ปิด + health (อะไรพร้อม/ไม่พร้อม)."""
@@ -198,27 +327,35 @@ def system_status():
 
 
 @router.post("/system/toggle")
-def system_toggle(enable: bool):
+def system_toggle(enable: bool, background_tasks: BackgroundTasks):
     """เปิด/ปิดระบบอัตโนมัติ (จำสถานะข้าม restart). ปิด = บอทไม่รัน/ไม่โพสต์เอง."""
     st = system_state.set_enabled(enable)
+    if enable and system_state.autopilot_on():
+        background_tasks.add_task(run_autopilot_once)
     return {"enabled": st["enabled"]}
 
 
 @router.post("/system/autopilot")
-def system_autopilot(enable: bool):
+def system_autopilot(enable: bool, background_tasks: BackgroundTasks):
     """เปิด/ปิด Auto-Pilot — ประมวลผลร้านใหม่เองตามรอบ (ต้องเปิดระบบหลักด้วย)."""
     st = system_state.set_autopilot(enable)
+    if enable and system_state.is_enabled():
+        background_tasks.add_task(run_autopilot_once)
     return {"autopilot": st["autopilot"]}
 
 
 @router.post("/run-all")
 def run_all(background: BackgroundTasks, limit: int = 20):
-    """ยิงครบวงทุกร้านสถานะ new (รันเรียงทีละร้านใน task เดียว กัน lock + rate limit)."""
+    """ยิงครบวงทุกร้านสถานะ new. หากไม่มีร้านใหม่ จะทำการดึงข้อมูลร้านค้าจาก Shopee เข้ามาแบบ Auto"""
     if not system_state.is_enabled():
         raise HTTPException(409, "ระบบปิดอยู่ — กดเปิดระบบก่อน")
     with get_session() as s:
         ids = [r.id for r in s.exec(
             select(Store).where(Store.status == "new").limit(limit)).all()]
+    if not ids:
+        print("[run-all] ไม่พบร้านสถานะ new กำลังเปิดใช้โหมดดึงข้อมูลร้านและประมวลผลอัตโนมัติ...")
+        background.add_task(scrape_and_run_all_seq, limit)
+        return {"status": "started_with_scrape", "count": "auto-scrape"}
     background.add_task(_run_all_seq, ids)
     return {"status": "started", "count": len(ids)}
 
@@ -285,7 +422,8 @@ def get_content(store_id: int):
                           "first_comment": (v.first_comment or "").replace("{LINK}", link),
                           "hashtags": jloads(v.hashtags_json, []),
                           "media_type": v.media_type,
-                          "media_url": ("/media/" + v.media_path.replace("\\", "/").split("/")[-1]) if v.media_path else ""}
+                          "media_url": ("/media/" + v.media_path.replace("\\", "/").split("/")[-1]) if v.media_path else "",
+                          "created_at": v.created_at.isoformat() if v.created_at else None}
                          for v in valid_variants],
         }
 

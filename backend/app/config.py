@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     # Flow quota guard — เมื่อเครดิต Flow หมด พักไม่ยิงซ้ำ (กันเสียเวลา/เครดิต)
     flow_block_hours: int = 6             # บล็อก Flow กี่ชม.หลังเจอเครดิตหมด
 
+    database_url: str = ""
     data_dir: str = "/app/data"
 
     @property

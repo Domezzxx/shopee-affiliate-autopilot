@@ -37,25 +37,21 @@ async def _startup():
 async def _autopilot_loop():
     """Auto-Pilot (Sprint 6 P2): ประมวลผลร้าน 'new' เองตามรอบ เมื่อเปิดระบบ + autopilot."""
     from .services import system_state
-    from .db import Store, get_session
-    from sqlmodel import select
+    
+    # รอ 5 วินาทีหลังสตาร์ทเพื่อเคลียร์ระบบ และให้ทำงานได้ทันทีถ้าเปิดโหมดออโต้ไว้
+    await asyncio.sleep(5)
+    
     while True:
+        if system_state.is_enabled() and system_state.autopilot_on():
+            try:
+                from .api import run_autopilot_once
+                # รัน autopilot ใน thread แยก เพื่อไม่ให้บล็อก event loop หลักของ FastAPI
+                await asyncio.to_thread(run_autopilot_once)
+            except Exception as e:  # pragma: no cover
+                print(f"[autopilot] {e}")
+        
+        # หลับตามระยะเวลาที่กำหนดในรอบถัดไป
         await asyncio.sleep(max(60, settings.autopilot_interval_min * 60))
-        if not (system_state.is_enabled() and system_state.autopilot_on()):
-            continue
-        try:
-            with get_session() as s:
-                ids = [r.id for r in s.exec(
-                    select(Store).where(Store.status == "new").limit(settings.autopilot_batch)).all()]
-            if ids:
-                print(f"[autopilot] ประมวลผล {len(ids)} ร้านอัตโนมัติ: {ids}")
-                for sid in ids:
-                    try:
-                        pipeline.run_full(sid)
-                    except Exception as e:  # pragma: no cover
-                        print(f"[autopilot] store {sid}: {e}")
-        except Exception as e:  # pragma: no cover
-            print(f"[autopilot] {e}")
 
 
 async def _auto_optimize_loop():
