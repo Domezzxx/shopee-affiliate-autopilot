@@ -79,7 +79,11 @@ $("#btn-add").onclick = () => {
 };
 $("#btn-runall").onclick = async () => {
   const r = await api("/run-all", { method: "POST" });
-  toast(`เริ่มรัน ${r.count} ร้าน — ดูความคืบหน้าด้านบน`);
+  if (r.status === "started_with_scrape") {
+    toast(`ไม่พบร้านค้าใหม่ กำลังเริ่มดึงร้านและสร้างคลิปอัตโนมัติ — ดูความคืบหน้าด้านบน`);
+  } else {
+    toast(`เริ่มรัน ${r.count} ร้าน — ดูความคืบหน้าด้านบน`);
+  }
   startProgress();
 };
 $("#btn-sim").onclick = async () => {
@@ -317,14 +321,51 @@ window.approveJob = async (id) => {
 
 // ---------------- content + A/B
 async function renderContent() {
+  const filterMonth = $("#content-filter-month").value;
+  const filterPlatform = $("#content-filter-platform").value;
+
   const s = await api("/stores");
   let html = "";
   for (const st of s.filter((x) => x.status !== "new").slice(0, 20)) {
     const c = await api(`/content/${st.id}`).catch(() => null);
     if (!c || !c.variants.length) continue;
+
+    // Filter variants based on platform and creation month
+    let variants = c.variants;
+    if (filterPlatform) {
+      variants = variants.filter((v) => v.platform === filterPlatform);
+    }
+    if (filterMonth) {
+      variants = variants.filter((v) => {
+        if (!v.created_at) return false;
+        const d = new Date(v.created_at);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyymm = `${yyyy}-${mm}`;
+        return yyyymm === filterMonth;
+      });
+    }
+
+    // Skip store card entirely if no variants match
+    if (!variants.length) continue;
+
     const latestJob = c.jobs[0] || {};
     const isPending = latestJob.status === "pending_approval";
     const ab = await api(`/abtest/${st.id}`).catch(() => ({ verdict: {} }));
+    
+    // Filter A/B test results to match platform filter if applicable
+    let abHtml = "";
+    if (filterPlatform) {
+      const filteredAb = { verdict: {}, by_platform: {} };
+      if (ab.by_platform && ab.by_platform[filterPlatform]) {
+        filteredAb.by_platform[filterPlatform] = ab.by_platform[filterPlatform];
+        filteredAb.verdict[filterPlatform] = ab.verdict[filterPlatform];
+      }
+      abHtml = renderAB(filteredAb);
+    } else {
+      abHtml = renderAB(ab);
+    }
+
     html += `<div class="card" style="margin-bottom:14px">
       <div class="row"><h4>${esc(st.name)}</h4>
         <span>
@@ -340,7 +381,7 @@ async function renderContent() {
       ${isPending ? `<div class="banner mock" style="margin:8px 0 12px 0">⏳ คอนเทนต์ผลิตเสร็จแล้ว กำลังรอคุณอนุมัติเพื่อยิงโพสต์ออกไปยังแพลตฟอร์มต่าง ๆ</div>` : ""}
       ${c.reel_url ? `<div class="reelwrap"><div class="meta" style="margin-bottom:4px">คลิปรวม (montage) — โพสต์ได้เลย</div>
         <video class="reel" src="${getMediaUrl(c.reel_url)}" controls loop playsinline></video></div>` : ""}
-      <div class="preview">${c.variants.map((v) => `
+      <div class="preview">${variants.map((v) => `
         <div class="v">
           ${!v.media_url ? '<div class="media"></div>'
             : v.media_type === "video"
@@ -350,10 +391,10 @@ async function renderContent() {
           <div style="font-size:12px">${esc(v.hook)}</div>
           ${v.first_comment ? `<div class="fc">💬 ${esc(v.first_comment)}</div>` : ""}
         </div>`).join("")}</div>
-      ${renderAB(ab)}
+      ${abHtml}
     </div>`;
   }
-  $("#tab-content").innerHTML = html || '<p class="muted">ยังไม่มีคอนเทนต์ — กด "รันครบวง" ก่อน</p>';
+  $("#content-list").innerHTML = html || '<p class="muted">ไม่พบข้อมูลคอนเทนต์ที่ตรงกับตัวกรอง</p>';
 }
 function renderAB(ab) {
   if (!ab.by_platform) return "";
@@ -372,9 +413,46 @@ function renderAB(ab) {
 
 // ---------------- posts
 async function renderPosts() {
+  const filterMonth = $("#posts-filter-month").value;
+  const filterDate = $("#posts-filter-date").value;
+  const filterPlatform = $("#posts-filter-platform").value;
+  const filterStatus = $("#posts-filter-status").value;
+
   const p = await api("/posts");
-  $("#tab-posts").innerHTML = `<table><tr><th>เวลา</th><th>Platform</th><th>วิธี</th><th>บัญชี</th><th>สถานะ</th><th>คอมเมนต์ลิงก์</th><th>ID</th></tr>
-    ${p.map((x) => `<tr>
+
+  let filtered = p;
+  if (filterMonth) {
+    filtered = filtered.filter((x) => {
+      const dateStr = x.posted_at || x.created_at;
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyymm = `${yyyy}-${mm}`;
+      return yyyymm === filterMonth;
+    });
+  }
+  if (filterDate) {
+    filtered = filtered.filter((x) => {
+      const dateStr = x.posted_at || x.created_at;
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const yyyymmdd = `${yyyy}-${mm}-${dd}`;
+      return yyyymmdd === filterDate;
+    });
+  }
+  if (filterPlatform) {
+    filtered = filtered.filter((x) => x.platform === filterPlatform);
+  }
+  if (filterStatus) {
+    filtered = filtered.filter((x) => x.status === filterStatus);
+  }
+
+  $("#posts-table-wrap").innerHTML = `<table><tr><th>เวลา</th><th>Platform</th><th>วิธี</th><th>บัญชี</th><th>สถานะ</th><th>คอมเมนต์ลิงก์</th><th>ID</th></tr>
+    ${filtered.map((x) => `<tr>
       <td class="muted">${x.posted_at ? new Date(x.posted_at).toLocaleString("th-TH") : "—"}</td>
       <td>${x.platform}</td>
       <td><span class="chip ${x.method}">${x.method}</span></td>
@@ -382,7 +460,7 @@ async function renderPosts() {
       <td><span class="chip ${x.status}">${x.status}</span></td>
       <td>${x.comment_status ? `<span class="chip ${x.comment_status === "posted" ? "posted" : "failed"}">${x.comment_status}</span>` : "—"}</td>
       <td class="muted">${esc(x.external_id || x.error || "")}</td>
-    </tr>`).join("") || '<tr><td colspan=7 class="muted">ยังไม่มีโพสต์</td></tr>'}</table>`;
+    </tr>`).join("") || '<tr><td colspan=7 class="muted">ไม่พบข้อมูลโพสต์ที่ตรงกับตัวกรอง</td></tr>'}</table>`;
 }
 
 // ---------------- platform performance
@@ -473,6 +551,33 @@ $("#btn-connection").onclick = () => {
   }
 };
 
+// Register filter event listeners
+$("#content-filter-month").addEventListener("change", renderContent);
+$("#content-filter-platform").addEventListener("change", renderContent);
+$("#btn-content-filter-clear").addEventListener("click", () => {
+  $("#content-filter-month").value = "";
+  $("#content-filter-platform").value = "";
+  renderContent();
+});
+
+$("#posts-filter-month").addEventListener("change", () => {
+  $("#posts-filter-date").value = "";
+  renderPosts();
+});
+$("#posts-filter-date").addEventListener("change", () => {
+  $("#posts-filter-month").value = "";
+  renderPosts();
+});
+$("#posts-filter-platform").addEventListener("change", renderPosts);
+$("#posts-filter-status").addEventListener("change", renderPosts);
+$("#btn-posts-filter-clear").addEventListener("click", () => {
+  $("#posts-filter-month").value = "";
+  $("#posts-filter-date").value = "";
+  $("#posts-filter-platform").value = "";
+  $("#posts-filter-status").value = "";
+  renderPosts();
+});
+
 const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.startsWith("192.168.");
 loadAll();
 if (isLocal || backendUrl) {
@@ -507,3 +612,17 @@ document.getElementById('btn-scrape').onclick = async () => {
     loadAll();
   } catch(e) { toast(e.message, true); }
 };
+
+// ===== Open Chrome button =====
+const btnOpenChrome = document.getElementById('btn-open-chrome');
+if (btnOpenChrome) {
+  btnOpenChrome.onclick = async () => {
+    try {
+      toast("กำลังส่งคำสั่งเปิด Google Flow...");
+      const r = await api("/chrome/open", { method: "POST" });
+      toast(r.message || "เปิดเบราว์เซอร์บอทแล้ว");
+    } catch (e) {
+      toast(e.message, true);
+    }
+  };
+}

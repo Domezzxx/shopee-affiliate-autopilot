@@ -50,6 +50,24 @@ def generate_video_flow(prompt: str) -> str:
                 "--remote-debugging-port=9222",
                 f"--user-data-dir={profile_dir}",
                 "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-background-networking",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--disable-sync",
+                "--disable-client-side-phishing-detection",
+                "--disable-default-apps",
+                "--disable-component-update",
+                "--disable-hang-monitor",
+                "--disable-popup-blocking",
+                "--disable-prompt-on-repost",
+                "--disable-logging",
+                "--metrics-recording-only",
+                "--disable-gpu-shader-disk-cache",
+                "--disable-dev-shm-usage",
+                "--disable-extensions",
+                "--disable-features=Translate,BackForwardCache,CalculateNativeWinOcclusion,InterestFeedContentSuggestion",
                 "https://labs.google/fx/tools/flow"
             ]
             flags = 0x00000008 if os.name == 'nt' else 0
@@ -91,9 +109,9 @@ def generate_video_flow(prompt: str) -> str:
         if not page:
             print("[flow-auto] Opening new tab for Google Flow...")
             page = context.new_page()
-            page.goto("https://labs.google/fx/th/tools/flow", timeout=60000)
+            page.goto("https://labs.google/fx/th/tools/flow", wait_until="domcontentloaded", timeout=60000)
         
-        page.wait_for_load_state("load", timeout=20000)
+        page.wait_for_load_state("domcontentloaded", timeout=20000)
         
         # 3) Handle Dashboard (Click "+ New Project" / "โปรเจ็กต์ใหม่" if present)
         new_proj_selectors = [
@@ -109,7 +127,7 @@ def generate_video_flow(prompt: str) -> str:
             if btn.is_visible():
                 print(f"[flow-auto] Dashboard detected. Clicking '{sel}'...")
                 btn.click()
-                time.sleep(5)  # Wait for project editor to load
+                time.sleep(1)  # Quick yield, wait_for below will handle dynamic loading
                 break
         
         # 4) Locate prompt input — ต้องเป็น textbox ที่ "มองเห็นจริง" (Flow มี textbox ซ่อน x=0
@@ -144,13 +162,25 @@ def generate_video_flow(prompt: str) -> str:
         # 5) ส่งด้วย Enter (ทดสอบแล้วว่าช่องเคลียร์ = ส่งสำเร็จ — ปุ่มต่างๆ ไม่ trigger generate จริง)
         print("[flow-auto] ส่ง prompt (Enter)...")
         page.keyboard.press("Enter")
-        time.sleep(3)
+        
+        # รอให้ช่องข้อความว่างลง (แสดงว่ากดส่งสำเร็จแล้ว) แทนที่จะ sleep 3 วินาทีตายตัว
+        for _ in range(15):
+            try:
+                is_empty = page.evaluate(f"""() => {{
+                    const el = document.querySelectorAll('[role="textbox"], textarea')[{vis_idx}];
+                    return el ? (el.textContent.trim() === '' && el.value === '') : true;
+                }}""")
+                if is_empty:
+                    print("[flow-auto] ช่องข้อความเคลียร์แล้ว (ส่งสำเร็จ)")
+                    break
+            except Exception:
+                pass
+            time.sleep(0.2)
 
-        # 6) จัดการ Approve ถ้ามี (โผล่บางครั้ง — เช็คเร็วๆ ไม่บล็อก)
-        for _ in range(4):
+        # 6) จัดการ Approve ถ้ามี (เช็คเร็วๆ ไม่กี่วินาที ที่เหลือจะเช็คต่อในลูปรอวีดีโอเพื่อประหยัดเวลา)
+        for _ in range(2):
             clicked = False
-            for sel in ["div:has-text('อนุมัติ ไม่ต้องถามอีก')", "div:has-text('อนุมัติ')",
-                        "button:has-text('อนุมัติ')", "button:has-text('Approve')"]:
+            for sel in ["text=อนุมัติ", "text=Approve", "text=อนุมัติ ไม่ต้องถามอีก"]:
                 try:
                     el = page.locator(sel).first
                     if el.is_visible():
@@ -159,7 +189,7 @@ def generate_video_flow(prompt: str) -> str:
                     pass
             if clicked:
                 break
-            time.sleep(1.5)
+            time.sleep(0.5)
 
         # 7) รอวีดีโอ "ใหม่" (src ไม่ซ้ำของเดิม) — กันบั๊กหยิบวีดีโอเก่าตัวแรกมา
         print("[flow-auto] Waiting for NEW video to generate (up to ~6 นาที)...")
@@ -183,18 +213,41 @@ def generate_video_flow(prompt: str) -> str:
             if new:
                 video_url = new[-1]
                 break
+            
+            # ตรวจสอบและกด Approve ทุกรอบ เผื่อปุ่มโผล่มากลางทาง
+            for sel in ["text=อนุมัติ", "text=Approve", "text=อนุมัติ ไม่ต้องถามอีก"]:
+                try:
+                    el = page.locator(sel).first
+                    if el.is_visible():
+                        el.click()
+                        print("[flow-auto] คลิก Approve ในลูปรอวีดีโอ")
+                        break
+                except Exception:
+                    pass
+
             # ตรวจจับข้อความล้มเหลว/เครดิตหมด ของ Flow assistant → fail เร็ว บอกสาเหตุชัด
-            if i % 4 == 0:
+            if i % 3 == 0:    # เช็คทุก 6 วินาที (เร็วขึ้นเพื่อป้องกันการรอเมื่อระบบมีปัญหา)
                 try:
                     body = page.evaluate("() => document.body.innerText")
-                    if any(k in body for k in ["เกินโควตา", "เครดิตไม่เพียงพอ", "เครดิต AI เพิ่มเติม",
-                                               "insufficient", "quota", "out of credit"]):
+                    quota_keywords = [
+                        "เกินโควตา", "เครดิตไม่เพียงพอ", "เครดิต AI เพิ่มเติม", "หมดโควตา", "จำกัด", 
+                        "insufficient", "quota", "out of credit", "limit reached", "reached your limit",
+                        "สิทธิ์การใช้งานหมด"
+                    ]
+                    transient_keywords = [
+                        "error occurred", "something went wrong", "failed to generate", "ไม่สามารถสร้าง",
+                        "ขออภัย", "ความผิดพลาด", "ข้อผิดพลาด", "ล้มเหลว"
+                    ]
+                    if any(k in body for k in quota_keywords):
                         try:
                             from ..services import system_state
-                            system_state.set_flow_blocked()   # พัก Flow ไม่ยิงซ้ำ
+                            system_state.set_flow_blocked()   # พัก Flow ไม่ยิงซ้ำ (โควตาหมดจริง)
                         except Exception:
                             pass
-                        raise RuntimeError("เครดิต/โควตา Google Flow หมด — รอรีเซ็ต หรือเติมเครดิต (ดู labs.google/flow)")
+                        raise RuntimeError("ระบบตรวจพบว่าโควตาหมดบนหน้าเว็บ Google Flow — ยกเลิกการรอและใช้ระบบสำรอง")
+                    
+                    if any(k in body for k in transient_keywords):
+                        raise RuntimeError("เกิดข้อผิดพลาดชั่วคราวบนหน้าเว็บ Google Flow — ยกเลิกการรอและใช้ระบบสำรอง")
                 except RuntimeError:
                     raise
                 except Exception:

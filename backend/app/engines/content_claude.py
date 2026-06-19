@@ -233,8 +233,13 @@ def _gemini_generate(store: dict, label: str) -> tuple[dict, float]:
 
 def generate_content(store: dict) -> tuple[dict, float]:
     """คืน (ผลคอนเทนต์, ค่าใช้จ่ายโดยประมาณบาท). เลือก provider ตาม CONTENT_PROVIDER.
-    error/ไม่มี key → fallback mock เพื่อให้ระบบไม่ล่ม."""
+    หากมีปัญหาเรื่องคีย์หรือโควตาหมด จะแสดงข้อผิดพลาดจริงให้ผู้ใช้เห็นทันที."""
     provider = settings.content_provider
+    if provider == "gemini" and not settings.has_gemini:
+        raise RuntimeError("ไม่มีการตั้งค่า GEMINI_API_KEY หรือรูปแบบคีย์ไม่ถูกต้อง")
+    if provider == "claude" and not settings.has_claude:
+        raise RuntimeError("ไม่มีการตั้งค่า ANTHROPIC_API_KEY หรือรูปแบบคีย์ไม่ถูกต้อง")
+        
     try:
         if provider == "gemini" and settings.has_gemini:
             # เจน A
@@ -253,5 +258,6 @@ def generate_content(store: dict) -> tuple[dict, float]:
             data_A["variants"] = data_A.get("variants", []) + data_B.get("variants", [])
             return data_A, cost_A + cost_B
     except Exception as e:
-        print(f"[content:{provider}] error → fallback mock: {e}")
-    return _mock(store), 0.0
+        print(f"[content:{provider}] error: {e}")
+        raise RuntimeError(f"ล้มเหลวในการสร้างคอนเทนต์ผ่าน AI ({provider}): {e}")
+    raise RuntimeError(f"ไม่พบรูปแบบการสร้างคอนเทนต์สำหรับ: {provider}")

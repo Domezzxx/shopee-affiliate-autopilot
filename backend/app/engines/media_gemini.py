@@ -39,7 +39,7 @@ def _client():
 def generate_image(prompt: str) -> str:
     """สร้างภาพ 9:16 → คืน path ไฟล์."""
     if not settings.has_gemini:
-        return _placeholder(prompt, "image")
+        raise RuntimeError("ไม่มีการตั้งค่า GEMINI_API_KEY หรือรูปแบบคีย์ไม่ถูกต้อง")
     try:
         client = _client()
         resp = client.models.generate_content(
@@ -53,23 +53,24 @@ def generate_image(prompt: str) -> str:
                 with open(path, "wb") as f:
                     f.write(part.inline_data.data)
                 return path
-        return _placeholder(prompt, "image")
+        raise RuntimeError("ไม่พบข้อมูลรูปภาพในผลลัพธ์ของ Gemini API (คีย์อาจไม่มีสิทธิ์รันโมเดลรูปภาพ)")
     except Exception as e:  # pragma: no cover
         print(f"[gemini] image error: {e}")
-        return _placeholder(prompt, "image")
+        raise RuntimeError(f"ล้มเหลวในการสร้างรูปภาพผ่าน Gemini API: {e}")
 
 
 def generate_video(prompt: str) -> str:
     """สร้างวีดีโอสั้น 9:16 ด้วย Google Flow Browser Automation (ฟรี) โดยมี fallback ไปที่ Veo API."""
     if not settings.enable_video:
-        return _placeholder(prompt, "video")
+        raise RuntimeError("ระบบสร้างวิดีโอถูกปิดอยู่ (ENABLE_VIDEO=false)")
     
     # 0) ถ้า Flow ถูกพักอยู่ (เครดิตหมด) → ข้าม ไม่เสียเวลายิงซ้ำ
     try:
         from ..services import system_state
         if system_state.flow_blocked():
-            print("[flow-auto] ข้าม Flow (เครดิตหมด พักอยู่) → ใช้ fallback")
-            return _placeholder(prompt, "video")
+            raise RuntimeError("Google Flow โดนพักการใช้งานเนื่องจากตรวจพบว่าโควตาหมดในการรันก่อนหน้า")
+    except RuntimeError:
+        raise
     except Exception:
         pass
 
@@ -99,9 +100,9 @@ def generate_video(prompt: str) -> str:
                 return path
             except Exception as api_err:
                 print(f"[gemini] veo api error: {api_err}")
+                raise RuntimeError(f"การรันด้วย Veo API ล้มเหลว: {api_err}")
         
-        # 3) Fallback ไปที่ Placeholder หากระบบใช้ไม่ได้เลย
-        return _placeholder(prompt, "video")
+        raise RuntimeError(f"การสร้างวิดีโอล้มเหลว: Google Flow ผิดพลาด ({e}) และคีย์ Veo API ไม่พร้อมใช้งาน")
 
 
 # มุมกล้องสไตล์ food reel ปังๆ — ใช้สร้างภาพหลายช็อตคนละมุม (แก้ปัญหาคลิปซ้ำ/น่าเบื่อ)
