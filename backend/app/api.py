@@ -326,6 +326,19 @@ def system_status():
     return {"enabled": system_state.is_enabled(), "health": system_state.health()}
 
 
+@router.post("/affiliate/link")
+def affiliate_link(url: str, sub_id: str = ""):
+    """ทดสอบสร้างลิงก์ affiliate จาก URL ร้าน/สินค้า Shopee (ต้องใส่ APP_ID+SECRET ใน .env).
+    ใช้เช็คว่าต่อ Shopee Affiliate API ติดไหม ก่อนปล่อยให้ระบบโพสต์จริง."""
+    from .engines import shopee_affiliate
+    if not shopee_affiliate.available():
+        raise HTTPException(400, "ยังไม่ได้ใส่ SHOPEE_AFFILIATE_APP_ID / SECRET ใน .env")
+    link = shopee_affiliate.generate_link(url, [sub_id] if sub_id else [])
+    if not link:
+        raise HTTPException(502, "สร้างลิงก์ไม่สำเร็จ — เช็ค key/URL หรือดู log (ดูสเปก API ในคู่มือ)")
+    return {"origin_url": url, "sub_id": sub_id, "affiliate_link": link}
+
+
 @router.post("/system/toggle")
 def system_toggle(enable: bool, background_tasks: BackgroundTasks):
     """เปิด/ปิดระบบอัตโนมัติ (จำสถานะข้าม restart). ปิด = บอทไม่รัน/ไม่โพสต์เอง."""

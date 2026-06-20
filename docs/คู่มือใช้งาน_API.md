@@ -150,10 +150,17 @@ SHOPEE_AFFILIATE_APP_ID=...
 SHOPEE_AFFILIATE_SECRET=...
 ```
 
-> ⚠️ **สถานะตอนนี้:** ระบบยัง**ใส่ลิงก์ affiliate เอง**ต่อร้าน (ช่อง affiliate_link ตอนเพิ่มร้าน) ยังไม่ได้ต่อ Shopee Affiliate API อัตโนมัติ
-> ถ้าอยากให้ระบบ **สร้างลิงก์เอง + ใส่ sub_id track ต่อคลิป** = ต้อง build เพิ่ม (บอกผมได้ เดี๋ยวทำ engine `shopee_affiliate.py` ให้ — generate ลิงก์ตอนโพสต์อัตโนมัติ)
+> ✅ **build แล้ว!** engine `backend/app/engines/shopee_affiliate.py` — พอใส่ APP_ID+SECRET ใน `.env`
+> ระบบจะ **สร้างลิงก์ affiliate เอง + ใส่ sub_id track อัตโนมัติตอนโพสต์** (sub_id = `s<ร้าน>_<แพลตฟอร์ม>_<A/B>` → รู้ว่าคอมมิชชั่นมาจากคลิปไหน/ช่องไหน)
+> ถ้า**ไม่ใส่** key → ระบบ fallback ไปใช้ลิงก์ที่ใส่เองต่อร้าน (ช่อง affiliate_link) เหมือนเดิม — ไม่พัง
 
-> 💡 ระหว่างยังไม่ต่อ API: เข้าแดชบอร์ด affiliate → สร้างลิงก์เอง → ก๊อปมาใส่ช่อง "affiliate link" ตอนเพิ่มร้านในเว็บ ก็ได้คอมมิชชั่นแล้ว
+**ทดสอบว่าต่อ API ติดไหม** (หลังใส่ key + รันเซิร์ฟเวอร์):
+```
+POST http://127.0.0.1:8088/api/affiliate/link?url=<URL ร้าน Shopee>&sub_id=test
+```
+ได้ลิงก์สั้นกลับมา = ต่อสำเร็จ 🎉 (ถ้า error เช็ค key หรือ URL · ดูสเปกลายเซ็น SHA256 ด้านบน)
+
+> 💡 ยังไม่อยากต่อ API ก็ได้: เข้าแดชบอร์ด affiliate → สร้างลิงก์เอง → ก๊อปมาใส่ช่อง "affiliate link" ตอนเพิ่มร้านในเว็บ ก็ได้คอมมิชชั่นเหมือนกัน (แค่ไม่มี sub_id track ละเอียด)
 
 ---
 

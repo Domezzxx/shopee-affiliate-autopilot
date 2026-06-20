@@ -93,5 +93,6 @@ def health() -> dict:
         "ambience_sfx": bool(settings.freesound_api_key),
         "meta": settings.has_meta,
         "youtube": bool(settings.youtube_refresh_token),
+        "shopee_affiliate": bool(settings.shopee_affiliate_app_id and settings.shopee_affiliate_secret),
         "posting_mode": settings.posting_mode,
     }

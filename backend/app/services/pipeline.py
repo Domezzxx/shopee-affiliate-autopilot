@@ -93,6 +93,21 @@ def _affiliate_link(store: Store) -> str:
     return store.affiliate_link or store.shopee_url or "(ยังไม่ได้ใส่ลิงก์ affiliate)"
 
 
+def _affiliate_link_for(store: Store, sub_id: str = "") -> str:
+    """ลิงก์ affiliate สำหรับโพสต์ — ลองสร้างผ่าน Shopee Affiliate API (track ด้วย sub_id) ก่อน,
+    ทำไม่ได้ค่อยใช้ลิงก์ที่ใส่เองต่อร้าน."""
+    try:
+        from ..engines import shopee_affiliate
+        origin = store.shopee_url or store.affiliate_link
+        if shopee_affiliate.available() and origin and "shopee" in origin.lower():
+            link = shopee_affiliate.generate_link(origin, [sub_id] if sub_id else [])
+            if link:
+                return link
+    except Exception as e:  # pragma: no cover
+        print(f"[affiliate] {e}")
+    return _affiliate_link(store)
+
+
 def _is_video_file(p: str) -> bool:
     return bool(p) and p.lower().endswith((".mp4", ".mov", ".m4v", ".webm"))
 
@@ -146,7 +161,9 @@ def publish_job(content_job_id: int) -> dict:
             )
             # โพสต์สำเร็จ → วาง affiliate link เป็นคอมเมนต์แรก (แทน {LINK} ด้วยลิงก์จริง)
             if res["ok"]:
-                link = _affiliate_link(store)
+                # sub_id track ต่อโพสต์ = ร้าน_แพลตฟอร์ม_variant → รู้ว่าคอมมิชชั่นมาจากคลิปไหน
+                sub_id = f"s{v.store_id}_{v.platform}_{v.label}"
+                link = _affiliate_link_for(store, sub_id)
                 text = (v.first_comment or "สั่งเลย 👉 {LINK}").replace("{LINK}", link)
                 c = social.publish_comment(v.platform, res["method"], res["external_id"], text)
                 p.comment_id = c["comment_id"]
