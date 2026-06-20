@@ -9,10 +9,16 @@ services:
     container_name: affiliate-backend
     restart: unless-stopped
     env_file: .env
+    environment:
+      - DATA_DIR=/app/data
+      # วีดีโอ Google Flow: ต่อ Chrome ที่รันบนโฮสต์ (เปิดด้วย --remote-debugging-port=9222
+      #   และ --remote-debugging-address=0.0.0.0 เพื่อให้ container ต่อได้ — ดู docs/Docker_Setup.md)
+      - SENTIARA_FLOW_CDP_URL=http://host.docker.internal:9222
+      - FLOW_CDP_URL=http://host.docker.internal:9222
     ports:
       - "8088:8088"
     volumes:
-      - ./data:/app/data          # sqlite + สื่อที่ generate (ภาพ/วีดีโอ)
+      - ./data:/app/data          # sqlite + สื่อที่ generate (ภาพ/วีดีโอ) — เก็บนอก container ย้ายเครื่องได้
       - ./adb:/root/.android       # แชร์ adb keys ให้คุม phone farm (ถ้าใช้)
     # ต่อ phone farm ผ่าน ADB over network (adb tcpip) — ใส่ HOST_ADB=host.docker.internal:5037
     extra_hosts:
