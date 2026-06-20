@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>คู่มือ API — Affiliate Autopilot</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
+
+@page { size: A4; margin: 14mm 13mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root{
+  --shopee:#ee4d2d; --shopee-dk:#c0341a; --ink:#222; --muted:#666;
+  --line:#e6e6e6; --soft:#faf7f5; --green:#1b9c4f; --yellow:#e0a800; --red:#d9534f;
+  --blue:#2b6cb0; --codebg:#f4f5f7;
+}
+body{
+  font-family:'Sarabun','Leelawadee UI','Tahoma',sans-serif;
+  color:var(--ink); font-size:10.6pt; line-height:1.55; background:#fff;
+}
+.wrap{ max-width:780px; margin:0 auto; }
+
+/* ---- Cover header ---- */
+.cover{
+  background:linear-gradient(135deg,var(--shopee),#ff7337);
+  color:#fff; border-radius:16px; padding:30px 32px; margin-bottom:22px;
+  box-shadow:0 6px 18px rgba(238,77,45,.25);
+}
+.cover .badge{ display:inline-block; background:rgba(255,255,255,.22); padding:4px 12px;
+  border-radius:20px; font-size:9pt; font-weight:600; letter-spacing:.5px; margin-bottom:12px;}
+.cover h1{ font-size:25pt; font-weight:700; line-height:1.2; margin-bottom:8px; }
+.cover p{ font-size:11pt; opacity:.95; }
+.cover .meta{ margin-top:14px; font-size:9.2pt; opacity:.9; border-top:1px solid rgba(255,255,255,.3); padding-top:10px;}
+
+/* ---- Sections ---- */
+h2{ font-size:15pt; color:var(--shopee-dk); font-weight:700; margin:24px 0 12px;
+  padding-bottom:6px; border-bottom:2.5px solid var(--shopee); display:flex; align-items:center; gap:8px;}
+h3{ font-size:11.5pt; color:#333; font-weight:600; margin:14px 0 7px; }
+p{ margin:7px 0; }
+.section{ page-break-inside:avoid; }
+
+/* ---- Tables ---- */
+table{ width:100%; border-collapse:collapse; margin:12px 0; font-size:9.6pt; }
+th{ background:var(--shopee); color:#fff; text-align:left; padding:8px 10px; font-weight:600; }
+td{ padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+tr:nth-child(even) td{ background:var(--soft); }
+table.rounded{ border-radius:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+
+/* ---- Code ---- */
+code{ font-family:'Consolas','Courier New',monospace; background:var(--codebg);
+  padding:1px 5px; border-radius:4px; font-size:9pt; color:#b83; }
+pre{ background:var(--codebg); border:1px solid var(--line); border-left:3px solid var(--shopee);
+  border-radius:8px; padding:11px 13px; margin:9px 0; font-size:8.8pt; line-height:1.5;
+  font-family:'Consolas','Courier New',monospace; color:#2b2b2b; white-space:pre-wrap; word-break:break-word;}
+
+/* ---- Callouts ---- */
+.note{ border-radius:8px; padding:9px 13px; margin:9px 0; font-size:9.4pt; }
+.tip{ background:#eafaf0; border-left:3px solid var(--green); }
+.warn{ background:#fff6e6; border-left:3px solid var(--yellow); }
+.info{ background:#eaf2fb; border-left:3px solid var(--blue); }
+
+/* ---- Plan cards ---- */
+.plans{ display:flex; gap:12px; margin:14px 0; }
+.plan{ flex:1; border:1.5px solid var(--line); border-radius:12px; padding:14px; page-break-inside:avoid; }
+.plan.g{ border-color:var(--green); } .plan.y{ border-color:var(--yellow);} .plan.r{ border-color:var(--red);}
+.plan .tag{ font-size:8.5pt; font-weight:700; padding:3px 9px; border-radius:14px; color:#fff; display:inline-block;}
+.plan.g .tag{ background:var(--green);} .plan.y .tag{ background:var(--yellow);} .plan.r .tag{ background:var(--red);}
+.plan .price{ font-size:17pt; font-weight:700; margin:8px 0 4px; }
+.plan.g .price{ color:var(--green);} .plan.y .price{ color:#b8860b;} .plan.r .price{ color:var(--red);}
+.plan ul{ margin:6px 0 0 16px; font-size:9pt; color:#444; }
+.plan li{ margin:3px 0; }
+
+/* ---- misc ---- */
+.api-head{ display:flex; align-items:center; gap:9px; }
+.num{ background:var(--shopee); color:#fff; width:26px; height:26px; border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:11pt; flex:none;}
+.pill{ font-size:8pt; font-weight:600; padding:2px 8px; border-radius:12px; }
+.free{ background:#eafaf0; color:var(--green);} .paid{ background:#fdeaea; color:var(--red);}
+hr{ border:none; border-top:1px dashed var(--line); margin:18px 0; }
+.footer{ margin-top:26px; padding-top:12px; border-top:1px solid var(--line);
+  font-size:8.4pt; color:var(--muted); text-align:center; }
+a{ color:var(--blue); text-decoration:none; }
+.lead{ background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:12px 15px; margin:6px 0 16px; font-size:10pt;}
+.big-money{ color:var(--green); font-weight:700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="cover">
+    <span class="badge">📘 คู่มือสำหรับพี่กอล์ฟ</span>
+    <h1>คู่มือขอ &amp; ตั้งค่า API<br>Affiliate Autopilot</h1>
+    <p>ระบบทำคลิปรีวิวอาหาร + โพสต์อัตโนมัติ + ลิงก์ทำเงิน Shopee Affiliate</p>
+    <div class="meta">🔑 ทุก API key ใส่ในไฟล์เดียว: <code style="background:rgba(255,255,255,.2);color:#fff">affiliate-autopilot\.env</code> &nbsp;·&nbsp; 💸 เริ่มได้ฟรี 100%</div>
+  </div>
+
+  <div class="lead">
+    <b>อ่าน 1 นาทีเข้าใจ:</b> ระบบนี้ใช้ "กุญแจ" (API key) ของบริการต่างๆ เพื่อทำคลิปและโพสต์ให้อัตโนมัติ
+    — <b>เริ่มต้นไม่ต้องจ่ายเงินเลย</b> มีแค่ <b>Gemini</b> ตัวเดียวก็ทำคลิปได้แล้ว ที่เหลือค่อยๆ เพิ่มทีหลัง
+  </div>
+
+  <!-- ===== สรุปเร็ว ===== -->
+  <div class="section">
+  <h2>⭐ สรุปเร็ว — ขอตัวไหนก่อน</h2>
+  <table class="rounded">
+    <tr><th>#</th><th>API</th><th>ใช้ทำอะไร</th><th>ฟรี/จ่าย</th><th>จำเป็นไหม</th></tr>
+    <tr><td>1</td><td><b>Gemini</b></td><td>เขียนแคปชั่น + สร้างภาพ + วีดีโอ</td><td><span class="pill free">ฟรี</span></td><td><b>ต้องมี</b> (หัวใจ)</td></tr>
+    <tr><td>2</td><td><b>YouTube</b></td><td>โพสต์ Shorts อัตโนมัติ</td><td><span class="pill free">ฟรี</span></td><td>ถ้าจะโพสต์ YouTube</td></tr>
+    <tr><td>3</td><td><b>Pexels</b></td><td>footage อาหารจริง (วีดีโอ)</td><td><span class="pill free">ฟรี</span></td><td>แนะนำ</td></tr>
+    <tr><td>4</td><td><b>Freesound</b></td><td>เสียงบรรยากาศร้าน (ASMR)</td><td><span class="pill free">ฟรี</span></td><td>แนะนำ</td></tr>
+    <tr><td>5</td><td><b>Apify</b></td><td>ดึงร้าน/สินค้า Shopee</td><td><span class="pill free">ฟรี $5</span></td><td>ถ้าดึงร้านอัตโนมัติ</td></tr>
+    <tr><td>6</td><td><b>Shopee Affiliate</b> 💰</td><td>สร้างลิงก์ affiliate (คอมมิชชั่น)</td><td><span class="pill free">ฟรี</span></td><td><b>ต้องมี</b> ถ้าจะได้เงิน</td></tr>
+    <tr><td>7</td><td><b>Meta</b> (FB+IG)</td><td>โพสต์ Facebook + Instagram</td><td><span class="pill free">ฟรี*</span></td><td>ถ้าจะโพสต์ FB/IG</td></tr>
+    <tr><td>8</td><td>Claude</td><td>เขียนแคปชั่น (คุณภาพสูงกว่า)</td><td><span class="pill paid">จ่าย</span></td><td>ไม่จำเป็น</td></tr>
+  </table>
+  <div class="note info">* Meta ฟรี แต่ต้องผ่าน "App Review" ถึงจะโพสต์เพจคนอื่นได้ (เพจตัวเองทดสอบได้เลย)</div>
+  </div>
+
+  <!-- ===== แผนค่าใช้จ่าย ===== -->
+  <div class="section">
+  <h2>💸 แผนค่าใช้จ่าย API — เริ่มได้ "ฟรี 100%"</h2>
+  <p>ของที่เสียเงินทั้งหมดเป็น <b>"ตัวเลือกตอน scale"</b> ไม่ใช่ของบังคับ — เริ่มต้นไม่ต้องจ่ายเลยสักบาท</p>
+  <table class="rounded">
+    <tr><th>API</th><th>ฟรีได้แค่ไหน</th><th>จ่ายเมื่อไหร่</th><th>ถ้าจ่าย (ประมาณ)</th></tr>
+    <tr><td><b>Gemini</b></td><td>ฟรี — ลิมิตต่อวัน พอใช้จริง</td><td>ใช้ Veo วีดีโอ</td><td>ข้อความ+ภาพ ~ฟรี · Veo ~฿15-25/วิ</td></tr>
+    <tr><td><b>Google Flow</b></td><td>ฟรี — เครดิตจำกัด/วัน</td><td>อยากได้เครดิตเยอะ</td><td>Google AI Pro ~฿700/เดือน</td></tr>
+    <tr><td><b>YouTube</b></td><td>ฟรี 100% (~6 คลิป/วัน)</td><td>—</td><td><span class="big-money">฿0</span></td></tr>
+    <tr><td><b>Pexels</b></td><td>ฟรี 100% (20,000/เดือน)</td><td>—</td><td><span class="big-money">฿0</span></td></tr>
+    <tr><td><b>Freesound</b></td><td>ฟรี 100%</td><td>—</td><td><span class="big-money">฿0</span></td></tr>
+    <tr><td><b>Shopee Affiliate</b> 💰</td><td>ฟรี 100% — ตัวทำเงิน!</td><td>—</td><td><span class="big-money">฿0</span> (ได้คอมมิชชั่นกลับ)</td></tr>
+    <tr><td><b>Meta</b></td><td>ฟรี 100%</td><td>—</td><td><span class="big-money">฿0</span></td></tr>
+    <tr><td><b>Apify</b></td><td>ฟรี $5 เครดิต/เดือน</td><td>ดึงร้านเยอะมาก</td><td>แพ็กเริ่มต้น ~฿1,700/เดือน</td></tr>
+    <tr><td><b>Claude</b></td><td>❌ ไม่มีฟรี</td><td>เลือกใช้แทน Gemini</td><td>~฿0.5-2/คลิป</td></tr>
+  </table>
+
+  <h3>📊 3 แผนตามงบ</h3>
+  <div class="plans">
+    <div class="plan g">
+      <span class="tag">🟢 ฟรีล้วน</span>
+      <div class="price">฿0<span style="font-size:9pt;font-weight:400">/เดือน</span></div>
+      <div style="font-size:8.8pt;color:#666">แนะนำเริ่มตรงนี้</div>
+      <ul>
+        <li>Gemini + Flow (ฟรี)</li>
+        <li>YouTube + Pexels + Freesound</li>
+        <li>Shopee Affiliate (ลิงก์ทำเงิน)</li>
+        <li>ทำได้ ~ไม่กี่คลิป/วัน พอเริ่ม+ทดสอบ</li>
+      </ul>
+    </div>
+    <div class="plan y">
+      <span class="tag">🟡 กึ่งโปร</span>
+      <div class="price">~฿700<span style="font-size:9pt;font-weight:400">/เดือน</span></div>
+      <div style="font-size:8.8pt;color:#666">ตอนเริ่มมีคลิปติด</div>
+      <ul>
+        <li>+ Google AI Pro</li>
+        <li>เครดิต Flow เยอะ → คลิปมากขึ้น/สวยขึ้น</li>
+        <li>Apify ฟรี $5 ก็พอ</li>
+      </ul>
+    </div>
+    <div class="plan r">
+      <span class="tag">🔴 สเกล</span>
+      <div class="price">~฿2.5-4k<span style="font-size:9pt;font-weight:400">/เดือน</span></div>
+      <div style="font-size:8.8pt;color:#666">เมื่อพิสูจน์แล้วว่าคุ้ม</div>
+      <ul>
+        <li>AI Pro + Apify จ่าย</li>
+        <li>+ Claude แคปชั่นเทพ</li>
+        <li>หลายช่อง/หลายร้าน เต็มสูบ</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note tip"><b>💰 จุดคุ้มทุน:</b> คอมมิชชั่น Shopee ~฿6/คลิก · ถ้าคลิปทำคลิกได้ <b>วันละ ~120 คลิก = ~฿700/วัน</b> ก็คืนค่าแผนกึ่งโปรทั้งเดือนแล้ว<br>
+  👉 กลยุทธ์: <b>เริ่มฟรี → ดูว่าคลิปไหนทำคลิก (ใช้ sub_id track) → ค่อยจ่ายเพื่อ scale เฉพาะตัวที่เวิร์ก</b></div>
+  <div class="note warn"><b>⚠️ หมายเหตุ:</b> ราคาเป็นค่าประมาณ (เรต ~36 บาท/ดอลลาร์) ผู้ให้บริการอาจปรับเปลี่ยน — เช็คหน้าราคาจริงก่อนสมัครแบบจ่ายเงิน</div>
+  </div>
+
+  <!-- ===== วิธีใส่ key ===== -->
+  <div class="section">
+  <h2>📝 วิธีใส่ key ลงไฟล์ <code>.env</code></h2>
+  <table class="rounded">
+    <tr><th style="width:30px">1</th><td>เปิดโฟลเดอร์ <code>affiliate-autopilot</code></td></tr>
+    <tr><th>2</th><td>หาไฟล์ <code>.env</code> (ถ้าไม่มี ก๊อปจาก <code>.env.example</code> มาตั้งชื่อ <code>.env</code>)</td></tr>
+    <tr><th>3</th><td>เปิดด้วย Notepad → หาบรรทัด key → วางค่าหลัง <code>=</code> (ห้ามเว้นวรรค ห้ามใส่เครื่องหมายคำพูด)</td></tr>
+    <tr><th>4</th><td>เซฟ → รีสตาร์ทระบบ <code>./scripts/start.ps1</code></td></tr>
+  </table>
+  <pre>GEMINI_API_KEY=AIzaSyXXXXXXXXXXXXXXXXX</pre>
+  <div class="note warn">⚠️ ไฟล์ <code>.env</code> เป็นความลับ — อย่าส่งให้ใคร อย่าอัปขึ้น GitHub (ระบบกันไว้ให้แล้ว)</div>
+  </div>
+
+  <!-- ===== APIs ===== -->
+  <div class="section">
+  <h2><span class="api-head"><span class="num">1</span> Gemini (Google AI)</span> <span class="pill free">ฟรี · สำคัญสุด</span></h2>
+  <p><b>ใช้:</b> เขียนแคปชั่น/สคริปต์ + สร้างภาพอาหาร (Nano Banana) + วีดีโอ (Veo)</p>
+  <p><b>ขอที่:</b> <a>https://aistudio.google.com/apikey</a> → ล็อกอิน Google → <b>Create API key</b> → <b>in new project</b> → ก๊อปกุญแจ (ขึ้นต้น <code>AIza...</code>)</p>
+  <pre>GEMINI_API_KEY=AIza...        ← วางกุญแจตรงนี้
+CONTENT_PROVIDER=gemini       ← ใช้ Gemini เขียน (ฟรี)</pre>
+  </div>
+
+  <div class="section">
+  <h2><span class="api-head"><span class="num">2</span> YouTube</span> <span class="pill free">ฟรี</span></h2>
+  <p><b>ใช้:</b> อัปโหลด Shorts อัตโนมัติ · ทำ 2 ขั้น</p>
+  <h3>ขั้น A: สร้าง OAuth client (Google Cloud Console)</h3>
+  <p><a>https://console.cloud.google.com</a></p>
+  <table class="rounded">
+    <tr><th style="width:30px">1</th><td>สร้าง Project ใหม่</td></tr>
+    <tr><th>2</th><td>APIs &amp; Services → Library → ค้น <b>"YouTube Data API v3"</b> → <b>Enable</b></td></tr>
+    <tr><th>3</th><td>OAuth consent screen → <b>External</b> → ใส่ชื่อแอป+อีเมล → <b>Test users → + ADD USERS</b> ใส่อีเมลที่จะโพสต์ (สำคัญ!)</td></tr>
+    <tr><th>4</th><td>Credentials → Create Credentials → <b>OAuth client ID</b> → <b>Desktop app</b> → ได้ Client ID + Secret</td></tr>
+  </table>
+  <h3>ขั้น B: ขอ refresh token</h3>
+  <pre>YOUTUBE_CLIENT_ID=...apps.googleusercontent.com
+YOUTUBE_CLIENT_SECRET=GOCSPX-...</pre>
+  <p>แล้วรัน:</p>
+  <pre>./venv/Scripts/python.exe scripts/youtube_oauth.py</pre>
+  <p>→ เบราว์เซอร์เด้งให้ล็อกอิน + Allow → ระบบเขียน <code>YOUTUBE_REFRESH_TOKEN</code> ลง <code>.env</code> ให้เอง ✅</p>
+  <div class="note info">เจอ "Google hasn't verified this app" = ปกติ (แอปเราเอง) → <b>Advanced → Go to ... (unsafe) → Allow</b></div>
+  </div>
+
+  <div class="section">
+  <h2><span class="api-head"><span class="num">3</span> Pexels</span> <span class="pill free">ฟรี</span></h2>
+  <p><b>ใช้:</b> ดึงคลิปวีดีโออาหารจริง (เส้นยืด/ไอลอย/คนกิน) ผสมให้คลิปดูเป็นรีวิวจริง</p>
+  <p><b>ขอที่:</b> <a>https://www.pexels.com/api/</a> → <b>Get Started</b> → สมัคร/ล็อกอิน → ตอบคำถามสั้นๆ → ได้ API Key ทันที</p>
+  <pre>PEXELS_API_KEY=...</pre>
+  </div>
+
+  <div class="section">
+  <h2><span class="api-head"><span class="num">4</span> Freesound</span> <span class="pill free">ฟรี</span></h2>
+  <p><b>ใช้:</b> เสียง chatter ในร้าน/ASMR คลอใต้เสียงพากย์ ให้คลิปมีชีวิต</p>
+  <p><b>ขอที่:</b> <a>https://freesound.org/apiv2/apply/</a> → สมัคร/ล็อกอินก่อน → กรอกชื่อแอป+คำอธิบายสั้นๆ → Submit → ได้ API Key</p>
+  <pre>FREESOUND_API_KEY=...</pre>
+  </div>
+
+  <div class="section">
+  <h2><span class="api-head"><span class="num">5</span> Apify</span> <span class="pill free">ฟรี $5/เดือน</span></h2>
+  <p><b>ใช้:</b> ดึงรายการสินค้า/ร้านจาก Shopee อัตโนมัติ (Shopee กันบอท ต้องใช้ตัวนี้)</p>
+  <p><b>ขอที่:</b> <a>https://apify.com</a> → สมัคร → Settings → Integrations → <b>API tokens</b> → ก๊อป Personal API token (<code>apify_api_...</code>)</p>
+  <pre>APIFY_TOKEN=apify_api_...
+APIFY_ACTOR=xtracto~shopee-search
+SCRAPER_MODE=apify
+SHOPEE_KEYWORDS=ก๋วยเตี๋ยว        ← เปลี่ยนคำค้นร้านได้</pre>
+  </div>
+
+  <div class="section">
+  <h2><span class="api-head"><span class="num">6</span> Shopee Affiliate</span> <span class="pill free">ฟรี · ตัวทำเงิน 💰</span></h2>
+  <p><b>ใช้:</b> สร้าง <b>ลิงก์ affiliate ของพี่กอล์ฟ</b> อัตโนมัติ (ใส่ในคอมเมนต์แรก) → คนกดซื้อ = <b>พี่กอล์ฟได้คอมมิชชั่น</b></p>
+  <div class="note tip">นี่คือหัวใจของการ "หาเงิน" — ถ้าไม่มีตัวนี้ คลิปโพสต์ได้แต่ไม่มีลิงก์ที่ track คอมมิชชั่น</div>
+  <h3>ขั้น A: สมัครเป็น Shopee Affiliate</h3>
+  <p><a>https://affiliate.shopee.co.th/</a> → สมัคร + ยืนยันตัวตน (บัตร ปชช + บัญชีรับเงิน) → รออนุมัติ 1-3 วัน</p>
+  <h3>ขั้น B: ขอ Open API (App ID + Secret)</h3>
+  <p>เข้าแดชบอร์ด affiliate → เมนู <b>"Open API"</b> / <b>"API Management"</b> → ขอใช้ → ได้ <b>App ID</b> + <b>Secret</b></p>
+  <ul style="margin:4px 0 8px 18px;font-size:9.4pt">
+    <li>Endpoint (GraphQL): <code>https://open-api.affiliate.shopee.co.th/graphql</code></li>
+    <li>ยืนยัน: ลายเซ็น SHA256(AppId + Timestamp + Payload + Secret)</li>
+    <li>ความสามารถ: สร้าง short link + sub_id (track) + ดูคอมมิชชั่น</li>
+  </ul>
+  <pre>SHOPEE_AFFILIATE_APP_ID=...
+SHOPEE_AFFILIATE_SECRET=...</pre>
+  <div class="note tip"><b>✅ build แล้ว!</b> engine <code>shopee_affiliate.py</code> — พอใส่ key ระบบ <b>สร้างลิงก์เอง + ใส่ sub_id track อัตโนมัติตอนโพสต์</b><br>
+  sub_id = <code>s&lt;ร้าน&gt;_&lt;แพลตฟอร์ม&gt;_&lt;A/B&gt;</code> → รู้ว่าคอมมิชชั่นมาจากคลิปไหน/ช่องไหน · ไม่ใส่ key → fallback ลิงก์ใส่เอง (ไม่พัง)</div>
+  <p><b>ทดสอบว่าต่อ API ติดไหม</b> (หลังใส่ key + รันเซิร์ฟเวอร์):</p>
+  <pre>POST http://127.0.0.1:8088/api/affiliate/link?url=&lt;URL ร้าน Shopee&gt;&amp;sub_id=test</pre>
+  <p>ได้ลิงก์สั้นกลับมา = ต่อสำเร็จ 🎉</p>
+  <div class="note info">💡 ยังไม่อยากต่อ API ก็ได้: เข้าแดชบอร์ด affiliate → สร้างลิงก์เอง → ก๊อปมาใส่ช่อง "affiliate link" ตอนเพิ่มร้าน ก็ได้คอมมิชชั่นเหมือนกัน (แค่ไม่มี sub_id track ละเอียด)</div>
+  </div>
+
+  <div class="section">
+  <h2><span class="api-head"><span class="num">7</span> Meta (Facebook + Instagram)</span> <span class="pill free">ฟรี</span></h2>
+  <p><b>ใช้:</b> โพสต์ FB Page + Instagram อัตโนมัติ · ยุ่งสุดในบรรดาทั้งหมด</p>
+  <p><b>ขอที่:</b> <a>https://developers.facebook.com</a></p>
+  <table class="rounded">
+    <tr><th style="width:30px">1</th><td>ต้องมี <b>Facebook Page</b> + (ถ้าลง IG) <b>IG Business</b> ผูกกับเพจ</td></tr>
+    <tr><th>2</th><td>My Apps → <b>Create App → Business</b></td></tr>
+    <tr><th>3</th><td>Tools → <b>Graph API Explorer</b> → Generate Access Token → ติ๊ก: <code>pages_manage_posts</code>, <code>pages_read_engagement</code>, <code>instagram_content_publish</code></td></tr>
+    <tr><th>4</th><td>หา <b>Page ID</b> (หน้าเพจ → About) และ <b>IG User ID</b></td></tr>
+  </table>
+  <pre>META_PAGE_ID=...
+META_IG_USER_ID=...
+META_ACCESS_TOKEN=...
+PUBLIC_BASE_URL=          ← เฉพาะ IG · รัน ./scripts/start_tunnel.ps1 จะใส่ให้</pre>
+  <div class="note warn">⚠️ โพสต์เพจตัวเองทดสอบได้เลย · โพสต์โปรดักชันจริงต้องผ่าน <b>App Review</b> (~1-2 สัปดาห์)</div>
+  </div>
+
+  <div class="section">
+  <h2><span class="api-head"><span class="num">8</span> Claude (Anthropic)</span> <span class="pill paid">จ่ายเงิน · ไม่จำเป็น</span></h2>
+  <p><b>ใช้:</b> เขียนแคปชั่นคุณภาพสูงกว่า Gemini (ภาษาไทยลื่นกว่า) · <b>ข้ามได้</b> เพราะ Gemini ฟรีพอแล้ว</p>
+  <p><b>ขอที่:</b> <a>https://console.anthropic.com</a> → API Keys → Create Key</p>
+  <pre>ANTHROPIC_API_KEY=sk-ant-...
+CONTENT_PROVIDER=claude      ← เปลี่ยนเป็น claude ถ้าจะใช้</pre>
+  </div>
+
+  <!-- ===== non-API ===== -->
+  <div class="section">
+  <h2>🔧 ของที่ไม่ใช่ API (setup อื่น)</h2>
+  <table class="rounded">
+    <tr><th>สิ่ง</th><th>คืออะไร</th><th>ทำยังไง</th></tr>
+    <tr><td><b>Google Flow</b><br>(วีดีโอ AI ฟรี)</td><td>ไม่ใช่ key — ใช้ล็อกอินใน Chrome</td><td>รัน <code>./scripts/start.ps1</code> (เปิด Chrome ให้) → ล็อกอิน labs.google/flow ครั้งเดียว</td></tr>
+    <tr><td><b>AI persona พูดได้</b><br>(พ่อครัว)</td><td>โมเดล Wav2Lip</td><td>รัน <code>./scripts/setup_persona.ps1</code> ครั้งเดียว (โหลดโมเดล)</td></tr>
+    <tr><td><b>Phone Farm</b><br>(โพสต์ผ่านมือถือ)</td><td>IP มือถือ Android</td><td><code>PHONE_FARM_DEVICES=192.168.1.51:5555,...</code> ใน <code>.env</code></td></tr>
+  </table>
+  </div>
+
+  <!-- ===== ปิดท้าย ===== -->
+  <div class="section">
+  <h2>✅ เช็ค &amp; ลำดับแนะนำ</h2>
+  <p><b>เช็คว่าใส่ครบไหม:</b> เปิดระบบ (<code>./scripts/start.ps1</code>) → บนหน้าเว็บกดปุ่ม <b>🚦 เช็คพร้อมโพสต์</b> หรือ hover ปุ่ม <b>● ระบบ</b> จะเห็นว่าตัวไหน ✓ ตัวไหนยังขาด</p>
+  <div class="note tip"><b>🎯 ลำดับการขอ (ค่อยๆ ทำ):</b><br>
+  1. Gemini (ทำคลิปได้เลย) → 2. Shopee Affiliate (ลิงก์ทำเงิน 💰) → 3. Pexels + Freesound (คลิปสวยขึ้น) → 4. YouTube (โพสต์ได้) → 5. Apify (ดึงร้านเอง) → 6. Meta (เปิด FB/IG ตอนพร้อม)<br><br>
+  💰 <b>ครบชุดเริ่มหาเงิน:</b> Gemini (ทำคลิป) + Shopee Affiliate (ลิงก์ทำเงิน) + YouTube (ช่องทางโพสต์)</div>
+  </div>
+
+  <div class="footer">
+    Affiliate Autopilot · คู่มือ API สำหรับพี่กอล์ฟ · ทุก key เก็บใน <code>.env</code> เท่านั้น (เป็นความลับ)
+  </div>
+
+</div>
+</body>
+</html>
