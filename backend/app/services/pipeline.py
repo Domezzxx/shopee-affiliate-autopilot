@@ -67,12 +67,22 @@ def generate_for_store(store_id: int) -> dict:
         )
         s.add(job); s.commit(); s.refresh(job)
 
+        # โหลดรูป product จริงจาก Shopee 1 รูป → ใช้ทำ image-to-video (วีดีโอตรงเมนูจริง)
+        product_img = ""
+        try:
+            imgs = media_gemini.download_images(jloads(store.image_urls_json, []), 1)
+            product_img = imgs[0] if imgs else ""
+            if product_img:
+                _prog(store_id, name, "🖼️ ได้รูป product จริง → image-to-video", 16)
+        except Exception as e:
+            print(f"[product-img] {e}")
+
         variants = data["variants"]
         total = len(variants) or 1
         for i, v in enumerate(variants):
             _prog(store_id, name, f"🎬 สร้างสื่อ {i + 1}/{total}", 18 + int(i / total * 64),
                   detail=f"{v['platform']} · {v['label']}")
-            mtype, mpath, ipath = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"], v["label"])
+            mtype, mpath, ipath = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"], v["label"], product_image=product_img)
             s.add(Variant(
                 content_job_id=job.id, store_id=store.id, label=v["label"],
                 platform=v["platform"], hook=v["hook"],

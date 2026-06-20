@@ -59,11 +59,15 @@ def generate_image(prompt: str) -> str:
         raise RuntimeError(f"ล้มเหลวในการสร้างรูปภาพผ่าน Gemini API: {e}")
 
 
-def generate_video(prompt: str) -> str:
-    """สร้างวีดีโอสั้น 9:16 ด้วย Google Flow Browser Automation (ฟรี) โดยมี fallback ไปที่ Veo API."""
+def generate_video(prompt: str, image_path: str = "") -> str:
+    """สร้างวีดีโอสั้น 9:16 ด้วย Google Flow Browser Automation (ฟรี) โดยมี fallback ไปที่ Veo API.
+
+    image_path: ถ้ามีรูป product จริง → ทำ 'image-to-video' (วีดีโอตรงเมนูจริง) ก่อน,
+    ทำไม่ได้ค่อย fallback ไป text-to-video แล้วค่อย Veo API.
+    """
     if not settings.enable_video:
         raise RuntimeError("ระบบสร้างวิดีโอถูกปิดอยู่ (ENABLE_VIDEO=false)")
-    
+
     # 0) ถ้า Flow ถูกพักอยู่ (เครดิตหมด) → ข้าม ไม่เสียเวลายิงซ้ำ
     try:
         from ..services import system_state
@@ -74,7 +78,15 @@ def generate_video(prompt: str) -> str:
     except Exception:
         pass
 
-    # 1) ลองรันด้วย Browser Automation (Flow) ก่อนเพื่อประหยัดเงินตามที่คุณกอล์ฟเลือก
+    # 1a) มีรูป product จริง → image-to-video ก่อน (วีดีโอตรงเมนูจริง = น่าเชื่อถือสุด)
+    if image_path and os.path.exists(image_path):
+        try:
+            from .flow_automation import generate_video_from_image
+            return generate_video_from_image(image_path, prompt)
+        except Exception as e:
+            print(f"[flow-img-fallback] image-to-video ล้มเหลว ({str(e)[:80]}) → ลอง text-to-video")
+
+    # 1b) ไม่มีรูป/ทำไม่ได้ → text-to-video ด้วย Browser Automation (Flow)
     try:
         from .flow_automation import generate_video_flow
         return generate_video_flow(prompt)
@@ -148,15 +160,16 @@ def generate_food_broll(dish: str, n: int = 6) -> list[str]:
     return out
 
 
-def make_media(image_prompt: str, video_prompt: str, hook: str = "", voiceover_script: str = "", label: str = "A") -> tuple[str, str, str]:
+def make_media(image_prompt: str, video_prompt: str, hook: str = "", voiceover_script: str = "", label: str = "A", product_image: str = "") -> tuple[str, str, str]:
     """คืน (media_type, media_path, image_path) ตาม VIDEO_MODE.
     image_path = ภาพต้นฉบับ เก็บไว้ใช้ทำคลิปรวม (montage) ภายหลัง.
+    product_image = รูป product จริงจาก Shopee → ใช้ทำ image-to-video (วีดีโอตรงเมนูจริง).
     image  = ภาพนิ่ง 9:16 (ฟรี) · ffmpeg = ภาพ AI → วีดีโอ Reels ฟรี · veo = Veo (เสียเงิน)."""
     mode = settings.video_mode
     voice = "th-TH-PremwadeeNeural" if label == "A" else "th-TH-NiwatNeural"
 
     if mode == "veo" or (settings.enable_video and mode == "image"):
-        vid = generate_video(video_prompt)
+        vid = generate_video(video_prompt, image_path=product_image)
         from . import video_ffmpeg
         img = video_ffmpeg.extract_frame(vid) or ""
         # Add voiceover and subtitles to Veo/Automation video if voiceover is enabled
