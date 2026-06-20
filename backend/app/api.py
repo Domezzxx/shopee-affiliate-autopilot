@@ -19,6 +19,22 @@ from .services import pipeline, system_state
 router = APIRouter(prefix="/api")
 
 
+def _is_flow_clip(v) -> bool:
+    """True เฉพาะคลิปที่สร้างโดย Google Flow — ใช้กรองให้ Dashboard แอดมินโชว์แค่คลิป Flow.
+    ใช้ media_source เป็นหลัก; แถวเก่า (ก่อนมีฟิลด์นี้) เดาจากชื่อไฟล์."""
+    import os
+    src = (getattr(v, "media_source", "") or "").lower()
+    if src == "flow":
+        return True
+    if src in ("veo", "ffmpeg", "image"):
+        return False
+    # legacy: ไม่มี media_source → เดาจากชื่อไฟล์ (คลิป Flow เก่า)
+    if v.media_path and v.media_type == "video":
+        fn = os.path.basename(v.media_path).lower()
+        return fn.startswith(("flow_voiced_", "video_flow_", "i2v_")) and not fn.endswith(".png")
+    return False
+
+
 # ----------------------------------------------------------------- schemas
 class StoreIn(BaseModel):
     name: str
@@ -396,9 +412,9 @@ def get_content(store_id: int):
                 if not v.media_path:
                     continue
                 filename = os.path.basename(v.media_path)
-                # วิดีโอจริงจากบอทต้องเริ่มด้วย video_flow_ เท่านั้น และห้ามเป็นไฟล์ .png ปลอม
+                # โชว์เฉพาะคลิปที่สร้างโดย Google Flow เท่านั้น (ตามที่แอดมินต้องการ)
                 if v.media_type == "video":
-                    if not filename.lower().startswith("video_flow_") or filename.lower().endswith(".png"):
+                    if not _is_flow_clip(v):
                         continue
                 # ตรวจสอบการมีอยู่จริงของไฟล์ในเครื่อง
                 full_path = v.media_path
@@ -597,7 +613,7 @@ def dashboard():
         stores = s.exec(select(Store)).all()
         jobs = s.exec(select(ContentJob)).all()
         
-        # 1) ดึงเฉพาะ ContentJob ล่าสุดของแต่ละร้านที่เกิดจากบอทจริงๆ (มีวิดีโอ video_flow_ เท่านั้น)
+        # 1) ดึงเฉพาะ ContentJob ล่าสุดของแต่ละร้านที่มีคลิปสร้างโดย Google Flow (_is_flow_clip)
         latest_job_ids = []
         for store in stores:
             latest_job = s.exec(
@@ -608,10 +624,7 @@ def dashboard():
             ).first()
             if latest_job:
                 variants = s.exec(select(Variant).where(Variant.content_job_id == latest_job.id)).all()
-                has_bot_media = any(
-                    v.media_path and os.path.basename(v.media_path).lower().startswith("video_flow_")
-                    for v in variants
-                )
+                has_bot_media = any(_is_flow_clip(v) for v in variants)
                 if has_bot_media:
                     latest_job_ids.append(latest_job.id)
         
@@ -648,7 +661,7 @@ def dashboard():
         bot_job_ids = []
         for j in jobs:
             v_list = s.exec(select(Variant).where(Variant.content_job_id == j.id)).all()
-            if any(v.media_path and os.path.basename(v.media_path).lower().startswith("video_flow_") for v in v_list):
+            if any(_is_flow_clip(v) for v in v_list):
                 bot_job_ids.append(j.id)
         bot_cost = sum(j.cost_baht for j in jobs if j.id in bot_job_ids)
         total_rev = clk * settings.affiliate_commission_per_click

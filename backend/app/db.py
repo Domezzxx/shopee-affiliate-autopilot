@@ -70,6 +70,7 @@ class Variant(SQLModel, table=True):
     image_prompt: str = ""
     video_prompt: str = ""
     media_type: str = "image"        # image | video
+    media_source: str = ""           # flow (Google Flow) | veo | ffmpeg | image — ที่มาของคลิป
     media_path: str = ""             # ไฟล์สื่อสุดท้าย (ภาพ/วีดีโอ)
     image_path: str = ""             # ภาพต้นฉบับ (เก็บไว้ทำคลิปรวม montage)
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -112,7 +113,7 @@ def _migrate() -> None:
     inspector = inspect(engine)
     new_cols = {
         "variant": [("first_comment", "TEXT DEFAULT ''"), ("image_path", "TEXT DEFAULT ''"),
-                    ("video_title", "TEXT DEFAULT ''")],
+                    ("video_title", "TEXT DEFAULT ''"), ("media_source", "TEXT DEFAULT ''")],
         "post": [("comment_id", "TEXT DEFAULT ''"), ("comment_status", "TEXT DEFAULT ''")],
         "store": [("reel_url", "TEXT DEFAULT ''"), ("requires_approval", "BOOLEAN DEFAULT FALSE")],
     }

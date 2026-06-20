@@ -144,7 +144,7 @@ def image_to_reel(image_path: str, text: str = "") -> str | None:
     seg = _scene_clip(ff, image_path, text, max(3, settings.video_seconds), 0)
     if not seg:
         return None
-    out = os.path.join(settings.media_dir, f"video_flow_{uuid.uuid4().hex[:8]}.mp4")
+    out = os.path.join(settings.media_dir, f"aireel_{uuid.uuid4().hex[:8]}.mp4")
     shutil.move(seg, out)
     return out
 

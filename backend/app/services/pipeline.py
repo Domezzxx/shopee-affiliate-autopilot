@@ -82,7 +82,7 @@ def generate_for_store(store_id: int) -> dict:
         for i, v in enumerate(variants):
             _prog(store_id, name, f"🎬 สร้างสื่อ {i + 1}/{total}", 18 + int(i / total * 64),
                   detail=f"{v['platform']} · {v['label']}")
-            mtype, mpath, ipath = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"], v["label"], product_image=product_img)
+            mtype, mpath, ipath, msource = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"], v["label"], product_image=product_img)
             s.add(Variant(
                 content_job_id=job.id, store_id=store.id, label=v["label"],
                 platform=v["platform"], hook=v["hook"],
@@ -91,7 +91,7 @@ def generate_for_store(store_id: int) -> dict:
                 cta=v["cta"], first_comment=v.get("first_comment", ""),
                 voiceover_script=v["voiceover_script"],
                 image_prompt=v["image_prompt"], video_prompt=v["video_prompt"],
-                media_type=mtype, media_path=mpath, image_path=ipath,
+                media_type=mtype, media_path=mpath, image_path=ipath, media_source=msource,
             ))
         store.status = "active"
         s.add(store); s.commit()
@@ -306,8 +306,11 @@ def build_restaurant(store_id: int, voice_name: str | None = None) -> dict:
                 f"สวัสดีครับ ร้าน {name[:20]} อร่อยเด็ด เส้นนุ่ม น้ำซุปสูตรเด็ด "
                 "มาชิมกันเยอะๆ นะครับ รับรองไม่ผิดหวัง สั่งเลย ลิงก์อยู่ในคอมเมนต์ครับ")
             flow_vids = [v.media_path for v in vs
-                         if v.media_path and os.path.basename(v.media_path).startswith("video_flow_")
-                         and os.path.exists(v.media_path)]
+                         if v.media_path and os.path.exists(v.media_path)
+                         and ((v.media_source or "").lower() == "flow"
+                              or (not v.media_source
+                                  and os.path.basename(v.media_path).lower().startswith(
+                                      ("flow_voiced_", "video_flow_", "i2v_"))))]
             imgs = [v.image_path for v in vs if v.image_path and os.path.exists(v.image_path)]
 
         _prog(key, name, "🍜 เตรียมสื่อ + footage", 6)
