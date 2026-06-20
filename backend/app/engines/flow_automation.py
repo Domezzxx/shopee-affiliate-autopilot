@@ -13,6 +13,29 @@ def _media_name(src: str) -> str:
     return m.group(1) if m else ""
 
 
+# ตัวอักษรไทย + emoji — ห้ามส่งเข้า prompt ของ Flow (Flow เป็นอังกฤษ + กันเรนเดอร์ตัวอักษรเพี้ยนลงวีดีโอ)
+_THAI_RE = re.compile(r"[฀-๿]+")
+_EMOJI_RE = re.compile(
+    "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF\U00002190-\U000021FF\U00002B00-\U00002BFF️]+"
+)
+
+
+def _clean_flow_prompt(prompt: str) -> str:
+    """ทำ prompt ให้สะอาดก่อนส่ง Google Flow: ตัดภาษาไทย + emoji ออก, เหลืออังกฤษล้วน + สั่งห้ามมีข้อความในวีดีโอ.
+    (รูป product จริงที่แนบไปบอก 'เมนูอะไร' อยู่แล้ว — prompt แค่บอกการเคลื่อนไหว/อารมณ์ภาพ)."""
+    p = _EMOJI_RE.sub("", prompt or "")
+    p = _THAI_RE.sub("", p)
+    p = re.sub(r"\s{2,}", " ", p)                # ยุบช่องว่างซ้ำที่ค้างจากการตัดคำ
+    p = re.sub(r"\s+([,.])", r"\1", p)           # " ," → "," , " ." → "."
+    p = re.sub(r"(,\s*){2,}", ", ", p)           # ",, " → ", " (กรณีตัดคำระหว่างจุลภาค)
+    p = p.strip(" ,.")
+    if not p:
+        p = "cinematic vertical 9:16 food review b-roll, appetizing, photorealistic"
+    if "no text" not in p.lower() and "no on-screen" not in p.lower():
+        p += ", no on-screen text, no captions, no words"
+    return p
+
+
 def _approve_credit(page) -> bool:
     """กดปุ่ม 'อนุมัติ' ยืนยันใช้เครดิตของ Flow.
 
@@ -74,6 +97,7 @@ def generate_video_flow(prompt: str) -> str:
     Generate video short 9:16 using Google Flow web app via Playwright CDP.
     Returns the absolute path of the downloaded mp4 file.
     """
+    prompt = _clean_flow_prompt(prompt)   # ตัดไทย+emoji ออก (Flow เป็นอังกฤษ)
     print(f"[flow-auto] Starting Google Flow video generation for prompt: {prompt}")
     
     # Check if port 9222 is open, if not, attempt to launch Chrome automatically
@@ -403,7 +427,9 @@ def generate_video_from_image(image_path: str, prompt: str) -> str:
     """
     if not image_path or not os.path.exists(image_path):
         raise RuntimeError(f"ไม่พบไฟล์รูป: {image_path}")
+    prompt = _clean_flow_prompt(prompt)   # ตัดไทย+emoji ออก (รูปบอกเมนูแล้ว prompt บอกแค่การเคลื่อนไหว)
     print(f"[flow-img] image-to-video จากรูป: {image_path}")
+    print(f"[flow-img] prompt (clean): {prompt[:80]}")
     _ensure_chrome_9222()
 
     pw = sync_playwright().start()
