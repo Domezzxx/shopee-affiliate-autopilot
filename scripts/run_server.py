@@ -9,7 +9,18 @@ os.environ.setdefault("DATA_DIR", os.path.join(ROOT, "data").replace("\\", "/"))
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 sys.path.insert(0, os.path.join(ROOT, "backend"))
 
+import time
+
 import uvicorn
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8088, log_level="info")
+    # self-heal: ถ้า uvicorn คืนค่า/พังด้วยเหตุใด → เปิดใหม่เองทันที (กันล่ม)
+    # (Watchdog ภายนอกจัดการกรณี process ตายทั้งตัว/ค้าง — ดู scripts/watchdog.ps1)
+    while True:
+        try:
+            uvicorn.run("app.main:app", host="127.0.0.1", port=8088,
+                        log_level="warning", access_log=False)
+        except Exception as e:  # pragma: no cover
+            print(f"[run_server] uvicorn crashed: {e}", flush=True)
+        print("[run_server] server stopped — restarting in 3s...", flush=True)
+        time.sleep(3)
