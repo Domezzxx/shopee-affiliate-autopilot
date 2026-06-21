@@ -513,15 +513,24 @@ function render(tab) {
   ({ stores: renderStores, content: renderContent, posts: renderPosts,
      platform: renderPlatform, report: renderReport, flow: renderFlow }[tab] || (() => {}))();
 }
+let liveStarted = false;
+function startLiveUpdates() {
+  if (liveStarted) return;
+  liveStarted = true;
+  startProgress();
+  setInterval(loadKpis, 15000);
+}
 async function loadAll() {
   const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.startsWith("192.168.");
   if (!isLocal && !backendUrl) {
-    loadBanner().catch(() => {});
-    return;
+    // เปิดผ่าน Funnel/โดเมนเดียวกับ backend → ลอง API ที่ origin เดียวกันก่อน ถ้าได้ใช้เลยไม่ต้องกดเชื่อม
+    try { await api("/keys/status"); }
+    catch (e) { loadBanner().catch(() => {}); return; }  // ไม่มี backend ที่ origin นี้ (เช่น Vercel) → ขึ้นปุ่มเชื่อม
   }
   await Promise.all([loadSystem().catch(() => {}), loadBanner().catch(() => {}), loadKpis().catch((e) => toast(e.message, true))]);
   const active = document.querySelector(".tabs button.active").dataset.tab;
   render(active);
+  startLiveUpdates();
 }
 
 // Highlight connection button if connected
@@ -578,12 +587,7 @@ $("#btn-posts-filter-clear").addEventListener("click", () => {
   renderPosts();
 });
 
-const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.startsWith("192.168.");
-loadAll();
-if (isLocal || backendUrl) {
-  startProgress();
-  setInterval(loadKpis, 15000);
-}
+loadAll();   // เชื่อม backend ได้ (local / Funnel / ตั้ง URL เอง) → loadAll เริ่ม live updates ให้เอง
 
 // ===== Modal helpers =====
 function showModal(title, html) {
