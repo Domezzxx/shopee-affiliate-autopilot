@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>คู่มือใช้งาน Dashboard — Affiliate Autopilot</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
+@page { size: A4; margin: 14mm 13mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root{
+  --shopee:#ee4d2d; --shopee-dk:#c0341a; --ink:#222; --muted:#666;
+  --line:#e6e6e6; --soft:#faf7f5; --green:#1b9c4f; --yellow:#e0a800; --red:#d9534f; --blue:#2b6cb0; --codebg:#f4f5f7;
+}
+body{ font-family:'Sarabun','Leelawadee UI','Tahoma',sans-serif; color:var(--ink); font-size:10.4pt; line-height:1.55; }
+.wrap{ max-width:780px; margin:0 auto; }
+.cover{ background:linear-gradient(135deg,var(--shopee),#ff7337); color:#fff; border-radius:16px; padding:28px 32px; margin-bottom:20px; box-shadow:0 6px 18px rgba(238,77,45,.25);}
+.cover .badge{ display:inline-block; background:rgba(255,255,255,.22); padding:4px 12px; border-radius:20px; font-size:9pt; font-weight:600; margin-bottom:10px;}
+.cover h1{ font-size:24pt; font-weight:700; line-height:1.2; margin-bottom:8px; }
+.cover p{ font-size:10.5pt; opacity:.95; }
+h2{ font-size:15pt; color:var(--shopee-dk); font-weight:700; margin:22px 0 11px; padding-bottom:6px; border-bottom:2.5px solid var(--shopee); }
+h3{ font-size:11.5pt; color:#333; font-weight:700; margin:13px 0 6px; }
+p{ margin:6px 0; }
+.section{ page-break-inside:avoid; }
+table{ width:100%; border-collapse:collapse; margin:10px 0; font-size:9.5pt; }
+th{ background:var(--shopee); color:#fff; text-align:left; padding:7px 10px; font-weight:600; }
+td{ padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+tr:nth-child(even) td{ background:var(--soft); }
+table.rounded{ border-radius:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+code{ font-family:'Consolas','Courier New',monospace; background:var(--codebg); padding:1px 5px; border-radius:4px; font-size:9pt; color:#b83; }
+pre{ background:var(--codebg); border:1px solid var(--line); border-left:3px solid var(--shopee); border-radius:8px; padding:10px 13px; margin:8px 0; font-size:9pt; font-family:'Consolas','Courier New',monospace; color:#2b2b2b; white-space:pre-wrap;}
+.note{ border-radius:8px; padding:9px 13px; margin:8px 0; font-size:9.4pt; }
+.tip{ background:#eafaf0; border-left:3px solid var(--green); }
+.warn{ background:#fff6e6; border-left:3px solid var(--yellow); }
+.info{ background:#eaf2fb; border-left:3px solid var(--blue); }
+.step{ display:flex; gap:10px; margin:7px 0; align-items:flex-start; page-break-inside:avoid; }
+.step .n{ background:var(--shopee); color:#fff; width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:10pt; flex:none; }
+.step .t{ font-size:9.8pt; padding-top:2px; }
+.footer{ margin-top:24px; padding-top:12px; border-top:1px solid var(--line); font-size:8.4pt; color:var(--muted); text-align:center; }
+.lead{ background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:12px 15px; margin:4px 0 16px; font-size:10pt;}
+.tag{ font-size:8pt; font-weight:700; padding:2px 8px; border-radius:12px; background:#eafaf0; color:var(--green); }
+b.k{ color:var(--shopee-dk); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="cover">
+    <span class="badge">🖥️ คู่มือใช้งานระบบ — สอนตั้งแต่เริ่ม</span>
+    <h1>คู่มือใช้งาน Dashboard<br>Affiliate Autopilot</h1>
+    <p>ทำคลิปรีวิวอาหาร Shopee Food + โพสต์อัตโนมัติ + วาง affiliate link หาคอมมิชชั่น</p>
+  </div>
+
+  <div class="lead"><b>คู่มือนี้สอน:</b> เปิดระบบ → เข้าใจทุกปุ่ม/ทุกแท็บ → ใช้งานครบวงจรหาเงิน · เหมาะกับคนเพิ่งเริ่มใช้</div>
+
+  <div class="section">
+  <h2>🟢 1. เริ่มต้น: เปิดระบบ</h2>
+  <div class="step"><span class="n">1</span><span class="t">เปิด PowerShell ในโฟลเดอร์ <code>affiliate-autopilot</code></span></div>
+  <div class="step"><span class="n">2</span><span class="t">รันคำสั่งเดียว: <code>./scripts/start.ps1</code> → เปิดเซิร์ฟเวอร์ + Chrome (Flow) + เปิดเว็บอัตโนมัติ</span></div>
+  <div class="step"><span class="n">3</span><span class="t">เว็บเปิดที่ <b>http://127.0.0.1:8088/</b></span></div>
+  <div class="step"><span class="n">4</span><span class="t"><b>ครั้งแรกครั้งเดียว:</b> ใน Chrome ที่เด้งขึ้น ล็อกอิน Google Flow (labs.google/flow) — ระบบจำให้</span></div>
+  <div class="note tip">💡 ปิดระบบ: <code>./scripts/stop.ps1</code> · เปิดใหม่ <code>./scripts/start.ps1</code> (ข้อมูลไม่หาย)</div>
+  </div>
+
+  <div class="section">
+  <h2>🗺️ 2. ภาพรวมหน้าจอ</h2>
+  <p>หน้าจอแบ่ง 4 ชั้นจากบนลงล่าง:</p>
+  <table class="rounded">
+    <tr><th>ชั้น</th><th>คืออะไร</th></tr>
+    <tr><td><b>แถบบนสุด</b> (Header)</td><td>ปุ่มควบคุมหลัก: เปิด/ปิดระบบ, Auto-Pilot, ดึงสินค้า, เพิ่มร้าน, รันครบวง</td></tr>
+    <tr><td><b>แถบสถานะ</b> (Banner)</td><td>บอกโหมดจริง (🟢 REAL) หรือทดสอบ (🟡 MOCK)</td></tr>
+    <tr><td><b>การ์ดตัวเลข</b> (KPIs)</td><td>สรุปภาพรวม: ร้าน, โพสต์, รายได้, CTR</td></tr>
+    <tr><td><b>แท็บ</b> (Tabs)</td><td>6 แท็บ: ร้านค้า · คอนเทนต์ A/B · โพสต์ · ช่องทาง · รายงาน · Flow ระบบ</td></tr>
+  </table>
+  </div>
+
+  <div class="section">
+  <h2>🎛️ 3. ปุ่มบนแถบบนสุด</h2>
+  <table class="rounded">
+    <tr><th>ปุ่ม</th><th>ทำอะไร</th></tr>
+    <tr><td><b class="k">● ระบบ</b></td><td>สวิตช์ใหญ่ เปิด/ปิดทั้งระบบ · 🟢 เปิด = บอททำงาน / 🔴 ปิด = หยุด · <b>ชี้เมาส์ค้าง</b> เห็นว่าอะไรพร้อม/ไม่พร้อม</td></tr>
+    <tr><td><b class="k">🤖 Auto</b></td><td>เปิด/ปิด <b>Auto-Pilot</b> — ดึงร้าน+สร้างคลิป+โพสต์ <b>เองตามรอบ</b> ไม่ต้องกดเอง</td></tr>
+    <tr><td><b class="k">🔗 เชื่อมต่อ API</b></td><td>(ใช้ผ่านมือถือ/รีโมท) ใส่ URL เครื่องที่รันบอท · เครื่องเดียวกัน <b>ไม่ต้องตั้ง</b></td></tr>
+    <tr><td><b class="k">🌐 เปิด Google Flow</b></td><td>เปิด Chrome ของบอทสำหรับสร้างวีดีโอ (ถ้าปิดไป)</td></tr>
+    <tr><td><b class="k">🔍 ดึงสินค้า</b></td><td>ดึงร้าน/สินค้าจาก Shopee ตามคำค้นใน <code>.env</code></td></tr>
+    <tr><td><b class="k">+ เพิ่มร้าน</b></td><td>เปิดฟอร์มเพิ่มร้านเอง / อัปโหลด CSV</td></tr>
+    <tr><td><b class="k">▶ รันครบวง</b></td><td><b>สร้างคลิป + โพสต์</b> ทุกร้านที่ยังใหม่ ในคำสั่งเดียว</td></tr>
+    <tr><td><b class="k">เครื่องมือ ▾</b></td><td>🚦 เช็คพร้อมโพสต์ · ⚙ Auto-optimize (หยุดร้าน CTR ต่ำ) · 🎲 จำลองผล (เดโม)</td></tr>
+  </table>
+  </div>
+
+  <div class="section">
+  <h2>📊 4. การ์ดตัวเลข (KPIs) อ่านอย่างไร</h2>
+  <table class="rounded">
+    <tr><th>การ์ด</th><th>ความหมาย</th></tr>
+    <tr><td><b>ร้านทั้งหมด</b></td><td>จำนวนร้าน · เขียว = active / แดง = paused (หยุด)</td></tr>
+    <tr><td><b>โพสต์</b></td><td>จำนวนโพสต์ที่ยิงออก · แดง = ล้มเหลวกี่อัน</td></tr>
+    <tr><td><b>รายได้ประเมิน</b></td><td>คลิก × ค่าคอมเฉลี่ย · ด้านล่าง = <b>กำไรสุทธิ</b> (รายได้ − ต้นทุน)</td></tr>
+    <tr><td><b>Impressions</b></td><td>ยอดคนเห็นรวม</td></tr>
+    <tr><td><b>CTR เฉลี่ย</b></td><td>อัตราคนกดลิงก์ (ยิ่งสูง = คลิปยิ่งปัง)</td></tr>
+    <tr><td><b>ค่า AI เขียน (สะสม)</b></td><td>ต้นทุนค่า AI เขียนคอนเทนต์รวม</td></tr>
+    <tr><td><b>สถานะระบบ</b></td><td>● เชื่อมแล้ว / ○ ยังไม่เชื่อม (Claude/Gemini/Meta) + โหมด + วีดีโอเปิด/ปิด</td></tr>
+  </table>
+  </div>
+
+  <div class="section">
+  <h2>📑 5. แท็บทั้ง 6 (หัวใจการใช้งาน)</h2>
+
+  <h3>1️⃣ ร้านค้า</h3>
+  <p>จัดการร้าน — แต่ละร้านเป็นการ์ด: ชื่อ · ย่าน · ⭐เรตติ้ง · เมนู · มีลิงก์ไหม · ทุน/กำไร</p>
+  <ul style="margin:4px 0 6px 18px; font-size:9.6pt">
+    <li>☑️ <b>ต้องการอนุมัติก่อนโพสต์</b> — ติ๊ก = สร้างเสร็จต้องกดอนุมัติก่อนถึงโพสต์ (กันพลาด)</li>
+    <li>▶ <b>รันร้านนี้</b> — สร้างคลิป + โพสต์ ร้านนี้ทันที</li>
+    <li><b>+ เพิ่มร้าน</b> → กรอกเอง หรือ 📄 <b>อัปโหลด CSV</b> ทีละหลายร้าน</li>
+  </ul>
+
+  <h3>2️⃣ คอนเทนต์ A/B</h3>
+  <p>ดูคลิป/คอนเทนต์ที่ AI สร้าง (ต่อร้าน) — มี <b>2 แบบ A/B</b> เทียบกัน</p>
+  <ul style="margin:4px 0 6px 18px; font-size:9.6pt">
+    <li>พรีวิววีดีโอ/ภาพ + hook + 💬 คอมเมนต์แรก (มี affiliate link)</li>
+    <li>ปุ่ม: 👩/👨 เลือกเสียง · 🎬 รวมคลิป A/B · 🍜 รีวิวในร้าน (พ่อครัวพูด)</li>
+    <li>ร้านที่ตั้ง "ต้องอนุมัติ" → ปุ่ม ✅ <b>อนุมัติ &amp; โพสต์</b></li>
+    <li>🏆 ผล A/B: CTR ของ A vs B ตัวไหนชนะ · 🔎 กรองตามเดือน/ช่องทาง</li>
+  </ul>
+
+  <h3>3️⃣ โพสต์</h3>
+  <p>ตารางประวัติการโพสต์: <b>เวลา · Platform · วิธี · บัญชี · สถานะ · คอมเมนต์ลิงก์ · ID</b></p>
+  <div class="note info">👉 อยากรู้ว่า "โพสต์ขึ้น YouTube จริงไหม" ดูแท็บนี้ · สถานะ <code>posted</code>=สำเร็จ <code>failed</code>=พลาด · กรองตามวัน/ช่องทาง/สถานะ</div>
+
+  <h3>4️⃣ ช่องทาง</h3>
+  <p>สรุปผลแยกแพลตฟอร์ม (FB/IG/YouTube): <b>CTR · Impressions · Clicks</b> — ดูช่องไหนเวิร์กสุด</p>
+
+  <h3>5️⃣ 📊 รายงาน</h3>
+  <p>รายงานสรุปรายวัน: ร้าน active/หยุด · โพสต์สำเร็จ/พลาด · Impressions · CTR · รายได้ · ต้นทุน + ตาราง 🏆 <b>ผู้ชนะ A/B ต่อร้าน</b></p>
+
+  <h3>6️⃣ Flow ระบบ</h3>
+  <p>แผนผังระบบ 5 ขั้น: ดึงร้าน → AI เขียน → AI ทำสื่อ → โพสต์อัตโนมัติ → เก็บผล + optimize</p>
+  </div>
+
+  <div class="section">
+  <h2>🚀 6. ขั้นตอนใช้งานครั้งแรก (ทำตามนี้)</h2>
+  <div class="step"><span class="n">1</span><span class="t"><b>เปิดระบบ</b> → <code>./scripts/start.ps1</code> → เว็บเด้งขึ้น</span></div>
+  <div class="step"><span class="n">2</span><span class="t">เช็ค <b>Banner</b> ต้องเป็น 🟢 REAL MODE (ถ้า 🟡 MOCK = ยังไม่ใส่ Gemini key)</span></div>
+  <div class="step"><span class="n">3</span><span class="t">กด <b>● ระบบ</b> ให้เป็น 🟢 ระบบเปิด</span></div>
+  <div class="step"><span class="n">4</span><span class="t"><b>ได้ร้านเข้าระบบ:</b> กด 🔍 ดึงสินค้า หรือ + เพิ่มร้าน / อัปโหลด CSV</span></div>
+  <div class="step"><span class="n">5</span><span class="t">แท็บ ร้านค้า → <b>▶ รันร้านนี้</b> (หรือ ▶ รันครบวง ทำทุกร้าน)</span></div>
+  <div class="step"><span class="n">6</span><span class="t">ดู <b>แถบ Progress</b> ด้านบนวิ่ง (AI กำลังสร้างคลิป)</span></div>
+  <div class="step"><span class="n">7</span><span class="t">เสร็จ → ดูคลิปที่แท็บ <b>คอนเทนต์ A/B</b> (ตรวจคลิป + เสียงไทย)</span></div>
+  <div class="step"><span class="n">8</span><span class="t">เช็คการโพสต์ที่แท็บ <b>โพสต์</b> (ขึ้น YouTube/FB/IG หรือยัง)</span></div>
+  <div class="step"><span class="n">9</span><span class="t">วันถัดไป ดูผลที่แท็บ <b>รายงาน</b> + <b>ช่องทาง</b> ว่าคลิปไหนปัง</span></div>
+  <div class="note tip">⚡ <b>อยากให้ทำเองทั้งหมด:</b> กด 🤖 Auto เปิด Auto-Pilot — ระบบดึงร้าน+สร้าง+โพสต์เองตามรอบ ไม่ต้องนั่งกด</div>
+  </div>
+
+  <div class="section">
+  <h2>🧰 7. งานที่ทำบ่อย</h2>
+  <table class="rounded">
+    <tr><th>อยากทำ</th><th>ทำยังไง</th></tr>
+    <tr><td>เพิ่มร้านใหม่</td><td>+ เพิ่มร้าน → กรอก → "บันทึก + รันร้านนี้"</td></tr>
+    <tr><td>เพิ่มทีหลายร้าน</td><td>+ เพิ่มร้าน → 📄 อัปโหลด CSV</td></tr>
+    <tr><td>สร้าง+โพสต์ร้านเดียว</td><td>แท็บ ร้านค้า → ▶ รันร้านนี้</td></tr>
+    <tr><td>สร้าง+โพสต์ทุกร้านใหม่</td><td>▶ รันครบวง</td></tr>
+    <tr><td>เช็คก่อนโพสต์</td><td>เครื่องมือ ▾ → 🚦 เช็คพร้อมโพสต์</td></tr>
+    <tr><td>โพสต์ต้องอนุมัติก่อน</td><td>ติ๊ก "ต้องอนุมัติ" ที่ร้าน → คอนเทนต์ A/B → ✅ อนุมัติ &amp; โพสต์</td></tr>
+    <tr><td>ดูว่าโพสต์ขึ้นจริงไหม</td><td>แท็บ โพสต์ (สถานะ posted)</td></tr>
+    <tr><td>ให้ระบบทำเองตลอด</td><td>🤖 Auto เปิด Auto-Pilot</td></tr>
+  </table>
+  </div>
+
+  <div class="section">
+  <h2>🆘 8. แก้ปัญหาเบื้องต้น</h2>
+  <table class="rounded">
+    <tr><th>อาการ</th><th>สาเหตุ / วิธีแก้</th></tr>
+    <tr><td>Banner เป็น 🟡 MOCK</td><td>ยังไม่ใส่ <code>GEMINI_API_KEY</code> ใน <code>.env</code> (ดูคู่มือ API)</td></tr>
+    <tr><td>สร้างคลิปแล้วไม่โพสต์ YouTube</td><td>"สร้าง" กับ "โพสต์" คนละขั้น — ใช้ ▶ รันร้านนี้/รันครบวง (สร้าง+โพสต์) หรือเปิด Auto · เช็คว่าไม่ติด "ต้องอนุมัติ"</td></tr>
+    <tr><td>วีดีโอไม่สร้าง</td><td>เช็ค 🌐 เปิด Google Flow + ล็อกอิน Flow + <code>ENABLE_VIDEO=true</code></td></tr>
+    <tr><td>เขียนคอนเทนต์ error 429</td><td>Gemini เครดิตหมด → เติมที่ ai.studio</td></tr>
+    <tr><td>กดปุ่มแล้วเด้ง error แดง</td><td>ระบบปิดอยู่ → กด ● ระบบ ให้เป็น 🟢 ก่อน</td></tr>
+  </table>
+  </div>
+
+  <div class="note tip" style="margin-top:16px"><b>💰 สรุปวงจรหาเงิน:</b> ดึงร้าน → รัน (AI สร้างคลิปมีเสียงไทย จากรูป product จริง) → โพสต์ YouTube/FB/IG + วาง affiliate link → คนกดซื้อ = ได้คอมมิชชั่น → ดูผลในรายงาน → เก็บตัวที่ปัง ทำซ้ำ</div>
+
+  <div class="footer">Affiliate Autopilot · คู่มือใช้งาน Dashboard · เปิดระบบ: ./scripts/start.ps1 → http://127.0.0.1:8088/</div>
+
+</div>
+</body>
+</html>

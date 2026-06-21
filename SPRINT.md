@@ -85,22 +85,36 @@
 - [x] **`video_ffmpeg.py`:** เกรดสีอาหาร+vignette · xfade + ความเร็วแปรผัน (beat) · `build_review_reel` (เสียงพากย์ก่อน→ตัดภาพพอดี ไม่เหลือช่องว่าง + cap 22วิ) · `_video_clip` footage→9:16 · แยก `_mux_audio` (3-stream amix + retry)
 - [x] `media_gemini`: `generate_food_broll` (หลายมุม) + `download_images` (รูป Shopee จริง)
 - [x] **Google Flow AI Browser Automation (ฟรีผ่าน Chrome Debugging)** — พัฒนาสคริปต์ Playwright CDP ควบคุม Chrome เจนวิดีโอฟรีผ่านหน้าเว็บ Google Flow ลดต้นทุน Veo API
-- [ ] ค้าง: เก็บเป็น engine ถาวร `build_restaurant_reel` + wire ปุ่ม dashboard · ตัดสินใจ Veo สำหรับ footage เป๊ะ
+- [x] (เสร็จใน Sprint 6) เก็บเป็น engine ถาวร `build_restaurant_reel` + ปุ่ม dashboard · Flow video แก้ได้แล้ว (ดู Sprint 6 P2)
 
 ## ✅ Sprint 4 — Phone Farm จริง (6 เครื่อง) (เสร็จสมบูรณ์)
 - [x] ผูก uiautomator2 ต่อแอป (FB/IG/YouTube) — แตะปุ่ม+พิมพ์แคปชั่นจริง อัปเดตไฟล์มีเดียแกลเลอรีอัตโนมัติ
 - [x] จัดคิว + lock ต่อเครื่อง ด้วย Thread Locking กันชนกัน + ตรวจสอบสถานะการเชื่อมต่อ (online/offline)
 - [x] anti-detection: จำลองการป้อนตัวอักษรแบบพิมพ์จริงทีละอักษร (Humanized typing) + หน่วงเวลาสุ่มป้องกันการแบน
 
-## 🟢 Sprint 6 — Production Auto-Pilot (รวม Flow video เข้าคอนเทนต์ + ครบวงจรอัตโนมัติ) ← กำลังทำ
-> breakthrough: Google Flow เจน **ก๋วยเตี๋ยวเรือ Veo จริง ฟรี** ได้แล้ว → เอามาเป็นหัวใจคอนเทนต์ + ทำให้รันเองครบวง
-- [x] **P1 เก็บโหมดรีวิวในร้านเป็น engine ถาวร** `talking_head.build_restaurant_reel` (พ่อครัวเต็มจอ→แอคชั่น+PiP+ASMR, มี progress) + `pipeline.build_restaurant` (รวมสื่อ: Flow video ถ้ามี ไม่งั้น stock) + endpoint `/stores/{id}/restaurant-reel` + ปุ่ม dashboard "🍜 รีวิวในร้าน" · ทดสอบจริงผ่าน (reel_dd571b81)
-- [x] **P1 รวม Flow video เข้า reel** — `build_restaurant` หยิบ `video_flow_*.mp4` ของร้านมาเป็น hero footage ก่อน (ไม่พอเติม stock) · ⚠️ Flow generate ยังไม่นิ่ง (UI ซับซ้อน) แต่โครงพร้อมรับเมื่อ Flow เสถียร
-- [x] **Flow: หาปุ่ม Generate จริง + พิมพ์เข้า Slate** (commit 5fc0381) — generate ได้บ้างแต่ไม่นิ่ง (chat panel แยก)
-- [x] **P2 Harden Flow** — เฉลย: Flow ทำงานได้! ที่ fail = เครดิตหมด · submit ด้วย Enter + จับช่องที่มองเห็น + **quota guard** (เจอเครดิตหมด→พัก Flow `flow_block_hours` ชม. ไม่ยิงซ้ำ, media_gemini ข้ามไป fallback)
-- [x] **P2 Auto-Pilot scheduler** — `_autopilot_loop` ใน main.py (ประมวลผลร้าน new เองตามรอบ `autopilot_interval_min` ทีละ `autopilot_batch`) + toggle `/system/autopilot` + ปุ่ม 🤖 Auto บน dashboard (gate ด้วยระบบเปิด)
-- [x] **P3 รายงานสรุป + A/B winner** — `/api/report/daily` (ร้าน/โพสต์/CTR/รายได้/ต้นทุน + ผู้ชนะ A/B ต่อร้าน) + แท็บ 📊 รายงาน บน dashboard
-- [ ] (เลื่อน) ใช้ variant ผู้ชนะเป็น base รอบถัดไป (ตอนนี้ตรวจ+โชว์ winner แล้ว) · รายงานเข้า Telegram
+## ✅ Sprint 6 — Production Auto-Pilot (รวม Flow video + ครบวงจรอัตโนมัติ) — เสร็จครบ P1-P2-P3
+> breakthrough: Google Flow เจน **ก๋วยเตี๋ยวเรือ Veo จริง ฟรี** ได้ → หัวใจคอนเทนต์ + รันเองครบวง
+- [x] **P1 โหมดรีวิวในร้าน (engine ถาวร)** `talking_head.build_restaurant_reel` (พ่อครัวเต็มจอ→แอคชั่น+PiP+ASMR + progress) + `pipeline.build_restaurant` (Flow video ถ้ามี ไม่งั้น stock) + endpoint + ปุ่ม "🍜 รีวิวในร้าน" · ทดสอบผ่าน
+- [x] **P1 รวม Flow video เข้า reel** — `build_restaurant` หยิบ `video_flow_*.mp4` ของร้านเป็น hero footage ก่อน
+- [x] **P2 Flow ทำงานได้! (เฉลย: ที่ fail = เครดิตหมด)** — submit ด้วย **Enter** (ปุ่มไม่ trigger generate) + จับช่อง prompt ที่มองเห็น (กัน textbox ซ่อน) + **ตรวจจับ "เครดิต/โควตาหมด"** fail เร็ว + **quota guard** (พัก Flow `flow_block_hours` ชม. → media_gemini ข้ามไป fallback) · มีเครดิตเมื่อไหร่ generate เองได้เลย
+- [x] **P2 Auto-Pilot scheduler** — `_autopilot_loop` (ประมวลผลร้าน new เองตามรอบ) + `run_autopilot_once`/`scrape_and_run_all_seq` (รวม scrape+run) + toggle `/system/autopilot` สั่งรันทันที + ปุ่ม 🤖 Auto
+- [x] **P3 รายงาน + A/B winner** — `/api/report/daily` (ร้าน/โพสต์/CTR/รายได้/ต้นทุน + ผู้ชนะ A/B) + แท็บ 📊 รายงาน
+- [x] **โพสต์ครบวง** — progress bar ต่อ platform (YT/FB/IG ✓/✗ + สรุป) · YouTube ใช้ **reel วีดีโอ** ถ้า media เป็นภาพ · **dedup กันอัปสื่อซ้ำ** (กัน YouTube ลบคลิปซ้ำ) · ทดสอบ YouTube โพสต์จริงผ่าน
+- [ ] (เลื่อน) ใช้ variant ผู้ชนะเป็น base รอบถัดไป · รายงานเข้า Telegram
+
+## 🟢 Sprint 7 — Cloud Deploy + Production (เริ่มแล้ว — งาน Antigravity)
+> เตรียมขึ้น production จริง ให้รันได้ตลอด ไม่ต้องเปิดเครื่องเอง
+- [x] **รองรับ Vercel deploy** (`vercel.json` + `.vercelignore`) + **สลับ SQLite↔PostgreSQL อัตโนมัติ** (db.py — local=SQLite, cloud=Postgres)
+- [x] **เปิด Chrome remote-debugging อัตโนมัติ** ถ้า port 9222 ปิด (`flow_automation` + endpoint `/chrome/open` + ปุ่มบน dashboard)
+- [x] **ตัวกรอง UI** (กรองคอนเทนต์/โพสต์ใน dashboard)
+- [ ] deploy ขึ้น Vercel จริง + ตั้ง PostgreSQL (Supabase/Neon) + env vars
+- [ ] แยก worker เครื่องบ้าน (Flow/phone farm ต้องรันบนเครื่องที่มี Chrome+มือถือ) ↔ web บน cloud
+
+## 🔜 Sprint 8 — Scale + ใช้งานจริง
+- [ ] ใส่ Meta token จริง (เปิด FB/IG จาก mock) + App Review
+- [ ] ดึง metric จริงจาก platform → A/B ตัดสิน → ใช้ winner เป็น base
+- [ ] จำกัดโพสต์/วันต่อ platform (กัน spam flag) + เปิด post delay default
+- [ ] รายงานเข้า Telegram/LINE + รองรับหลายคีย์เวิร์ด/จังหวัด
 
 ## ✅ เสร็จแล้วระหว่างทาง (ย้ายจาก backlog)
 - [x] ระบบ approve คอนเทนต์ก่อนโพสต์ (human-in-the-loop) — Store.requires_approval + pending_approval + ปุ่มอนุมัติ

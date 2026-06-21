@@ -67,12 +67,22 @@ def generate_for_store(store_id: int) -> dict:
         )
         s.add(job); s.commit(); s.refresh(job)
 
+        # โหลดรูป product จริงจาก Shopee 1 รูป → ใช้ทำ image-to-video (วีดีโอตรงเมนูจริง)
+        product_img = ""
+        try:
+            imgs = media_gemini.download_images(jloads(store.image_urls_json, []), 1)
+            product_img = imgs[0] if imgs else ""
+            if product_img:
+                _prog(store_id, name, "🖼️ ได้รูป product จริง → image-to-video", 16)
+        except Exception as e:
+            print(f"[product-img] {e}")
+
         variants = data["variants"]
         total = len(variants) or 1
         for i, v in enumerate(variants):
             _prog(store_id, name, f"🎬 สร้างสื่อ {i + 1}/{total}", 18 + int(i / total * 64),
                   detail=f"{v['platform']} · {v['label']}")
-            mtype, mpath, ipath = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"], v["label"])
+            mtype, mpath, ipath, msource = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"], v["label"], product_image=product_img)
             s.add(Variant(
                 content_job_id=job.id, store_id=store.id, label=v["label"],
                 platform=v["platform"], hook=v["hook"],
@@ -81,7 +91,7 @@ def generate_for_store(store_id: int) -> dict:
                 cta=v["cta"], first_comment=v.get("first_comment", ""),
                 voiceover_script=v["voiceover_script"],
                 image_prompt=v["image_prompt"], video_prompt=v["video_prompt"],
-                media_type=mtype, media_path=mpath, image_path=ipath,
+                media_type=mtype, media_path=mpath, image_path=ipath, media_source=msource,
             ))
         store.status = "active"
         s.add(store); s.commit()
@@ -91,6 +101,21 @@ def generate_for_store(store_id: int) -> dict:
 
 def _affiliate_link(store: Store) -> str:
     return store.affiliate_link or store.shopee_url or "(ยังไม่ได้ใส่ลิงก์ affiliate)"
+
+
+def _affiliate_link_for(store: Store, sub_id: str = "") -> str:
+    """ลิงก์ affiliate สำหรับโพสต์ — ลองสร้างผ่าน Shopee Affiliate API (track ด้วย sub_id) ก่อน,
+    ทำไม่ได้ค่อยใช้ลิงก์ที่ใส่เองต่อร้าน."""
+    try:
+        from ..engines import shopee_affiliate
+        origin = store.shopee_url or store.affiliate_link
+        if shopee_affiliate.available() and origin and "shopee" in origin.lower():
+            link = shopee_affiliate.generate_link(origin, [sub_id] if sub_id else [])
+            if link:
+                return link
+    except Exception as e:  # pragma: no cover
+        print(f"[affiliate] {e}")
+    return _affiliate_link(store)
 
 
 def _is_video_file(p: str) -> bool:
@@ -146,7 +171,9 @@ def publish_job(content_job_id: int) -> dict:
             )
             # โพสต์สำเร็จ → วาง affiliate link เป็นคอมเมนต์แรก (แทน {LINK} ด้วยลิงก์จริง)
             if res["ok"]:
-                link = _affiliate_link(store)
+                # sub_id track ต่อโพสต์ = ร้าน_แพลตฟอร์ม_variant → รู้ว่าคอมมิชชั่นมาจากคลิปไหน
+                sub_id = f"s{v.store_id}_{v.platform}_{v.label}"
+                link = _affiliate_link_for(store, sub_id)
                 text = (v.first_comment or "สั่งเลย 👉 {LINK}").replace("{LINK}", link)
                 c = social.publish_comment(v.platform, res["method"], res["external_id"], text)
                 p.comment_id = c["comment_id"]
@@ -279,8 +306,11 @@ def build_restaurant(store_id: int, voice_name: str | None = None) -> dict:
                 f"สวัสดีครับ ร้าน {name[:20]} อร่อยเด็ด เส้นนุ่ม น้ำซุปสูตรเด็ด "
                 "มาชิมกันเยอะๆ นะครับ รับรองไม่ผิดหวัง สั่งเลย ลิงก์อยู่ในคอมเมนต์ครับ")
             flow_vids = [v.media_path for v in vs
-                         if v.media_path and os.path.basename(v.media_path).startswith("video_flow_")
-                         and os.path.exists(v.media_path)]
+                         if v.media_path and os.path.exists(v.media_path)
+                         and ((v.media_source or "").lower() == "flow"
+                              or (not v.media_source
+                                  and os.path.basename(v.media_path).lower().startswith(
+                                      ("flow_voiced_", "video_flow_", "i2v_"))))]
             imgs = [v.image_path for v in vs if v.image_path and os.path.exists(v.image_path)]
 
         _prog(key, name, "🍜 เตรียมสื่อ + footage", 6)

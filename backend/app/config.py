@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     shopee_keywords: str = "ก๋วยเตี๋ยว"   # คำค้น (คั่นหลายคำด้วย ;)
     scraper_limit: int = 30
 
+    # Shopee Affiliate Open API — สร้างลิงก์ affiliate (คอมมิชชั่น) · ขอที่ affiliate.shopee.co.th
+    # (placeholder รอ build engine shopee_affiliate.py — ตอนนี้ยังใช้ลิงก์ใส่เองต่อร้าน)
+    shopee_affiliate_app_id: str = ""
+    shopee_affiliate_secret: str = ""
+
     # ระบบ
     posting_mode: str = "hybrid"          # hybrid | api | phone
     shopee_min_rating: float = 4.5

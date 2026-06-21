@@ -1,10 +1,9 @@
 // Affiliate Autopilot — dashboard (vanilla JS, ไม่มี build step)
 const $ = (s) => document.querySelector(s);
 
-let backendUrl = localStorage.getItem("backend_url") || "";
-if (backendUrl && backendUrl.endsWith("/")) {
-  backendUrl = backendUrl.slice(0, -1);
-}
+// เลิกใช้ "เชื่อมต่อ API" ภายนอก — เปิดผ่าน Tailscale Funnel/local = origin เดียวกับ backend
+let backendUrl = "";
+try { localStorage.removeItem("backend_url"); } catch (e) {}   // เคลียร์ค่าเก่า (กัน URL ตายค้าง)
 
 const getApiUrl = (path) => {
   return (backendUrl ? backendUrl : "") + "/api" + path;
@@ -169,11 +168,7 @@ async function loadBanner() {
       $("#banner").innerHTML = `<div class="banner mock">🟡 โหมด MOCK — อยากทดสอบฟรี: ตั้ง <b>CONTENT_PROVIDER=gemini</b> + ใส่ <b>GEMINI_API_KEY</b> ใน .env (ไม่ต้องใช้ Claude)${suffix}</div>`;
     }
   } catch (e) {
-    if (!isLocal && !backendUrl) {
-      $("#banner").innerHTML = `<div class="banner mock" style="background:#3a1a1a; border-color:var(--accent); color:#fff; font-weight:600;">⚠️ <b>ยังไม่ได้เชื่อมต่อ API:</b> กรุณากดปุ่ม <b>"🔗 เชื่อมต่อ API"</b> ด้านบน เพื่อใส่ URL ของ Cloudflare Tunnel ที่รันจากเครื่อง Local ของคุณ</div>`;
-    } else {
-      $("#banner").innerHTML = `<div class="banner mock" style="background:#3a1a1a; border-color:var(--accent); color:#fff; font-weight:600;">🔴 <b>ไม่สามารถเชื่อมต่อกับ API Backend ได้:</b> (${backendUrl || "Local"}) — เช็คการรันบอทหรือ Cloudflare Tunnel ของคุณ</div>`;
-    }
+    $("#banner").innerHTML = `<div class="banner mock" style="background:#3a1a1a; border-color:var(--accent); color:#fff; font-weight:600;">🔴 <b>ไม่สามารถเชื่อมต่อกับ API Backend ได้</b> — เช็คว่า server (:8088) รันอยู่ไหม</div>`;
     throw e;
   }
 }
@@ -513,43 +508,27 @@ function render(tab) {
   ({ stores: renderStores, content: renderContent, posts: renderPosts,
      platform: renderPlatform, report: renderReport, flow: renderFlow }[tab] || (() => {}))();
 }
+let liveStarted = false;
+function startLiveUpdates() {
+  if (liveStarted) return;
+  liveStarted = true;
+  startProgress();
+  setInterval(loadKpis, 15000);
+}
 async function loadAll() {
   const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.startsWith("192.168.");
   if (!isLocal && !backendUrl) {
-    loadBanner().catch(() => {});
-    return;
+    // เปิดผ่าน Funnel/โดเมนเดียวกับ backend → ลอง API ที่ origin เดียวกันก่อน ถ้าได้ใช้เลยไม่ต้องกดเชื่อม
+    try { await api("/keys/status"); }
+    catch (e) { loadBanner().catch(() => {}); return; }  // ไม่มี backend ที่ origin นี้ (เช่น Vercel) → ขึ้นปุ่มเชื่อม
   }
   await Promise.all([loadSystem().catch(() => {}), loadBanner().catch(() => {}), loadKpis().catch((e) => toast(e.message, true))]);
   const active = document.querySelector(".tabs button.active").dataset.tab;
   render(active);
+  startLiveUpdates();
 }
 
-// Highlight connection button if connected
-if (backendUrl) {
-  const btn = $("#btn-connection");
-  if (btn) {
-    btn.style.background = "var(--accent2)";
-    btn.style.borderColor = "var(--accent2)";
-    btn.style.color = "#08130d";
-    btn.title = "เชื่อมต่อ API: " + backendUrl + " (คลิกเพื่อแก้ไข)";
-  }
-}
-
-$("#btn-connection").onclick = () => {
-  const current = localStorage.getItem("backend_url") || "";
-  const val = prompt("ป้อน URL สำหรับเชื่อมต่อ API เครื่อง Local ของคุณ (เช่น https://xxxx.trycloudflare.com หรือ http://127.0.0.1:8088)\n(ปล่อยว่างเพื่อใช้โหมด Relative/Local ปกติ):", current);
-  if (val !== null) {
-    const trimmed = val.trim();
-    if (trimmed) {
-      localStorage.setItem("backend_url", trimmed);
-      toast("เชื่อมต่อ API ไปที่: " + trimmed);
-    } else {
-      localStorage.removeItem("backend_url");
-      toast("รีเซ็ตการเชื่อมต่อเป็นแบบ Local");
-    }
-    setTimeout(() => location.reload(), 1000);
-  }
-};
+// (ลบฟีเจอร์ "เชื่อมต่อ API" ออกแล้ว — ใช้ origin เดียวกับ backend ผ่าน Funnel/local)
 
 // Register filter event listeners
 $("#content-filter-month").addEventListener("change", renderContent);
@@ -578,12 +557,7 @@ $("#btn-posts-filter-clear").addEventListener("click", () => {
   renderPosts();
 });
 
-const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.startsWith("192.168.");
-loadAll();
-if (isLocal || backendUrl) {
-  startProgress();
-  setInterval(loadKpis, 15000);
-}
+loadAll();   // เชื่อม backend ได้ (local / Funnel / ตั้ง URL เอง) → loadAll เริ่ม live updates ให้เอง
 
 // ===== Modal helpers =====
 function showModal(title, html) {

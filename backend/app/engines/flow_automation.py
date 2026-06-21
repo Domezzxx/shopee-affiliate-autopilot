@@ -12,11 +12,92 @@ def _media_name(src: str) -> str:
     m = re.search(r"name=([^&#]+)", src or "")
     return m.group(1) if m else ""
 
+
+# ตัวอักษรไทย + emoji — ห้ามส่งเข้า prompt ของ Flow (Flow เป็นอังกฤษ + กันเรนเดอร์ตัวอักษรเพี้ยนลงวีดีโอ)
+_THAI_RE = re.compile(r"[฀-๿]+")
+_EMOJI_RE = re.compile(
+    "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF\U00002190-\U000021FF\U00002B00-\U00002BFF️]+"
+)
+
+
+def _clean_flow_prompt(prompt: str) -> str:
+    """ทำ prompt ให้สะอาดก่อนส่ง Google Flow: ตัดภาษาไทย + emoji ออก, เหลืออังกฤษล้วน + สั่งห้ามมีข้อความในวีดีโอ.
+    (รูป product จริงที่แนบไปบอก 'เมนูอะไร' อยู่แล้ว — prompt แค่บอกการเคลื่อนไหว/อารมณ์ภาพ)."""
+    p = _EMOJI_RE.sub("", prompt or "")
+    p = _THAI_RE.sub("", p)
+    p = re.sub(r"\s{2,}", " ", p)                # ยุบช่องว่างซ้ำที่ค้างจากการตัดคำ
+    p = re.sub(r"\s+([,.])", r"\1", p)           # " ," → "," , " ." → "."
+    p = re.sub(r"(,\s*){2,}", ", ", p)           # ",, " → ", " (กรณีตัดคำระหว่างจุลภาค)
+    p = p.strip(" ,.")
+    if not p:
+        p = "cinematic vertical 9:16 food review b-roll, appetizing, photorealistic"
+    if "no text" not in p.lower() and "no on-screen" not in p.lower():
+        p += ", no on-screen text, no captions, no words"
+    return p
+
+
+def _approve_credit(page) -> bool:
+    """กดปุ่ม 'อนุมัติ' ยืนยันใช้เครดิตของ Flow.
+
+    สำคัญ: ต้องเป็น element ที่ 'อยู่ในจอ + cursor:pointer' แล้วกดด้วย mouse จริง (trusted event ผ่าน CDP)
+    — JS .click() ไม่ติด, และการเลือก label ขวาสุด/นอกจอ (การ์ดเก่าใน history) ก็กดไม่ติด.
+    คืน True ถ้าเจอ+กด, False ถ้าไม่มีการ์ดให้อนุมัติ.
+    """
+    try:
+        box = page.evaluate(r"""() => {
+          const c=[...document.querySelectorAll('*')].filter(el=>{
+            const t=(el.innerText||'').trim();
+            if((t!=='อนุมัติ' && t!=='Approve') || el.children.length!==0) return false;
+            const r=el.getBoundingClientRect();
+            return r.top>=0 && r.top<window.innerHeight && getComputedStyle(el).cursor==='pointer';
+          }).map(el=>{const r=el.getBoundingClientRect();
+                     return {x:r.x+r.width/2, y:r.y+r.height/2, top:r.top};});
+          if(!c.length) return null;
+          c.sort((a,b)=>a.top-b.top);   // การ์ดบนสุดในจอ = อันที่รออนุมัติล่าสุด
+          return c[0];
+        }""")
+        if box:
+            page.mouse.move(box["x"], box["y"])
+            time.sleep(0.15)
+            page.mouse.click(box["x"], box["y"])
+            print("[flow-auto] กด 'อนุมัติ' (trusted, cursor:pointer ในจอ)")
+            return True
+    except Exception as e:
+        print(f"[flow-auto] approve error: {str(e)[:60]}")
+    return False
+
+
+def _click_text_trusted(page, text: str, exact: bool = True) -> bool:
+    """คลิกข้อความบนหน้า Flow ด้วย mouse จริง (trusted) — เลือก element ในจอ, ขวา/ล่างสุด."""
+    try:
+        box = page.evaluate(
+            r"""(args) => {
+              const [txt, exact] = args;
+              const c=[...document.querySelectorAll('button,[role=button],[role=menuitem],div,span,li')]
+                .map(el=>({el, t:(el.innerText||'').trim(), r:el.getBoundingClientRect()}))
+                .filter(o=>(exact? o.t===txt : o.t.includes(txt)) && o.r.width>5 && o.r.height>5
+                           && o.r.top>=0 && o.r.top<window.innerHeight);
+              if(!c.length) return null;
+              c.sort((a,b)=> (b.r.x-a.r.x) || (b.r.y-a.r.y));
+              const r=c[0].r; return {x:r.x+r.width/2, y:r.y+r.height/2};
+            }""",
+            [text, exact],
+        )
+        if box:
+            page.mouse.move(box["x"], box["y"])
+            time.sleep(0.1)
+            page.mouse.click(box["x"], box["y"])
+            return True
+    except Exception:
+        pass
+    return False
+
 def generate_video_flow(prompt: str) -> str:
     """
     Generate video short 9:16 using Google Flow web app via Playwright CDP.
     Returns the absolute path of the downloaded mp4 file.
     """
+    prompt = _clean_flow_prompt(prompt)   # ตัดไทย+emoji ออก (Flow เป็นอังกฤษ)
     print(f"[flow-auto] Starting Google Flow video generation for prompt: {prompt}")
     
     # Check if port 9222 is open, if not, attempt to launch Chrome automatically
@@ -177,24 +258,16 @@ def generate_video_flow(prompt: str) -> str:
                 pass
             time.sleep(0.2)
 
-        # 6) จัดการ Approve ถ้ามี (เช็คเร็วๆ ไม่กี่วินาที ที่เหลือจะเช็คต่อในลูปรอวีดีโอเพื่อประหยัดเวลา)
-        for _ in range(2):
-            clicked = False
-            for sel in ["text=อนุมัติ", "text=Approve", "text=อนุมัติ ไม่ต้องถามอีก"]:
-                try:
-                    el = page.locator(sel).first
-                    if el.is_visible():
-                        el.click(); clicked = True; print("[flow-auto] คลิก Approve"); break
-                except Exception:
-                    pass
-            if clicked:
+        # 6) จัดการ Approve (dialog 'ใช้เครดิต N ไหม') — ลองกดหลายรอบ เผื่อ dialog โผล่ช้า
+        for _ in range(6):
+            if _approve_credit(page):
                 break
-            time.sleep(0.5)
+            time.sleep(1.0)
 
         # 7) รอวีดีโอ "ใหม่" (src ไม่ซ้ำของเดิม) — กันบั๊กหยิบวีดีโอเก่าตัวแรกมา
-        print("[flow-auto] Waiting for NEW video to generate (up to ~6 นาที)...")
+        print("[flow-auto] Waiting for NEW video to generate (up to ~10 นาที, คิวอาจนาน)...")
         video_url = ""
-        for i in range(150):   # ~5 นาที (Veo generate 2-5 นาที) — เกินนี้ fallback
+        for i in range(300):   # ~10 นาที (Veo 2-5 นาที + คิว high-demand) — เกินนี้ fallback
             try:
                 srcs = page.locator("video").evaluate_all("els => els.map(e => e.src).filter(Boolean)")
             except Exception as e:
@@ -214,29 +287,18 @@ def generate_video_flow(prompt: str) -> str:
                 video_url = new[-1]
                 break
             
-            # ตรวจสอบและกด Approve ทุกรอบ เผื่อปุ่มโผล่มากลางทาง
-            for sel in ["text=อนุมัติ", "text=Approve", "text=อนุมัติ ไม่ต้องถามอีก"]:
-                try:
-                    el = page.locator(sel).first
-                    if el.is_visible():
-                        el.click()
-                        print("[flow-auto] คลิก Approve ในลูปรอวีดีโอ")
-                        break
-                except Exception:
-                    pass
+            # กด Approve ทุกรอบ เผื่อ dialog โผล่มากลางทาง (idempotent — ไม่มีก็ข้าม)
+            _approve_credit(page)
 
-            # ตรวจจับข้อความล้มเหลว/เครดิตหมด ของ Flow assistant → fail เร็ว บอกสาเหตุชัด
-            if i % 3 == 0:    # เช็คทุก 6 วินาที (เร็วขึ้นเพื่อป้องกันการรอเมื่อระบบมีปัญหา)
+            # ตรวจจับ 'เครดิต/โควตาหมดจริง' เท่านั้น → พัก Flow + fallback
+            # (ไม่ดักคำ transient ทั่วไปอย่าง 'ขออภัย/ข้อผิดพลาด' เพราะ false-positive — คิว 'high demand' = ปกติ ให้รอ)
+            if i % 5 == 0:
                 try:
                     body = page.evaluate("() => document.body.innerText")
                     quota_keywords = [
-                        "เกินโควตา", "เครดิตไม่เพียงพอ", "เครดิต AI เพิ่มเติม", "หมดโควตา", "จำกัด", 
-                        "insufficient", "quota", "out of credit", "limit reached", "reached your limit",
-                        "สิทธิ์การใช้งานหมด"
-                    ]
-                    transient_keywords = [
-                        "error occurred", "something went wrong", "failed to generate", "ไม่สามารถสร้าง",
-                        "ขออภัย", "ความผิดพลาด", "ข้อผิดพลาด", "ล้มเหลว"
+                        "เกินโควตา", "เครดิตไม่เพียงพอ", "เครดิต AI เพิ่มเติม", "หมดโควตา",
+                        "insufficient credit", "out of credit", "quota exceeded",
+                        "reached your limit", "สิทธิ์การใช้งานหมด",
                     ]
                     if any(k in body for k in quota_keywords):
                         try:
@@ -244,16 +306,13 @@ def generate_video_flow(prompt: str) -> str:
                             system_state.set_flow_blocked()   # พัก Flow ไม่ยิงซ้ำ (โควตาหมดจริง)
                         except Exception:
                             pass
-                        raise RuntimeError("ระบบตรวจพบว่าโควตาหมดบนหน้าเว็บ Google Flow — ยกเลิกการรอและใช้ระบบสำรอง")
-                    
-                    if any(k in body for k in transient_keywords):
-                        raise RuntimeError("เกิดข้อผิดพลาดชั่วคราวบนหน้าเว็บ Google Flow — ยกเลิกการรอและใช้ระบบสำรอง")
+                        raise RuntimeError("โควตา/เครดิต Google Flow หมด — พัก Flow และใช้ระบบสำรอง")
                 except RuntimeError:
                     raise
                 except Exception:
                     pass
-            if i % 15 == 0:    # log ทุก ~30 วิ ให้รู้ว่ายังรออยู่
-                print(f"[flow-auto] ...รอวีดีโอใหม่ (มีในจอ {len(srcs)} ตัว, ยังไม่มีตัวใหม่) {i*2}s")
+            if i % 15 == 0:    # log ทุก ~30 วิ ให้รู้ว่ายังรออยู่ (คิว high-demand อาจนาน)
+                print(f"[flow-auto] ...รอวีดีโอใหม่ (มีในจอ {len(srcs)} ตัว) {i*2}s")
             time.sleep(2)
 
         if not video_url:
@@ -317,4 +376,190 @@ def generate_video_flow(prompt: str) -> str:
         try:
             pw.stop()
         except:
+            pass
+
+
+def _ensure_chrome_9222() -> None:
+    """เปิด Chrome remote-debugging (9222) ถ้ายังไม่เปิด — ใช้ profile เดิม (ล็อกอิน Flow ค้างไว้)."""
+    import socket
+    import subprocess
+
+    def is_open(port: int) -> bool:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1.0)
+                s.connect(("127.0.0.1", port))
+                return True
+        except Exception:
+            return False
+
+    if is_open(9222):
+        return
+    paths = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), r"Google\Chrome\Application\chrome.exe"),
+    ]
+    exe = next((p for p in paths if os.path.exists(p)), None)
+    if not exe:
+        return
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    profile = os.path.join(root, "data", "chrome_profile")
+    os.makedirs(profile, exist_ok=True)
+    args = [exe, "--remote-debugging-port=9222", f"--user-data-dir={profile}",
+            "--no-first-run", "--no-default-browser-check",
+            "https://labs.google/fx/tools/flow"]
+    try:
+        subprocess.Popen(args, creationflags=0x00000008 if os.name == "nt" else 0)
+        for _ in range(12):
+            time.sleep(1)
+            if is_open(9222):
+                break
+    except Exception as e:
+        print(f"[flow-img] launch chrome failed: {e}")
+
+
+def generate_video_from_image(image_path: str, prompt: str) -> str:
+    """Image-to-video: เอารูป product จริง → Google Flow → วีดีโอ 9:16 ที่ 'ตรงเมนูจริง'.
+
+    ขั้นตอน: อัปรูปเข้า Flow → '+' แนบรูปเข้า prompt ('เพิ่มไปยังพรอมต์') → พิมพ์ prompt →
+    Enter → อนุมัติเครดิต (trusted) → รอวีดีโอใหม่ → โหลด .mp4. คืน path ของไฟล์.
+    """
+    if not image_path or not os.path.exists(image_path):
+        raise RuntimeError(f"ไม่พบไฟล์รูป: {image_path}")
+    prompt = _clean_flow_prompt(prompt)   # ตัดไทย+emoji ออก (รูปบอกเมนูแล้ว prompt บอกแค่การเคลื่อนไหว)
+    print(f"[flow-img] image-to-video จากรูป: {image_path}")
+    print(f"[flow-img] prompt (clean): {prompt[:80]}")
+    _ensure_chrome_9222()
+
+    pw = sync_playwright().start()
+    try:
+        try:
+            browser = pw.chromium.connect_over_cdp(settings.flow_cdp_url)
+        except Exception as e:
+            pw.stop()
+            raise RuntimeError(f"เชื่อม Chrome 9222 ไม่ได้: {e}") from e
+
+        context = browser.contexts[0]
+        page = next((p for p in context.pages if "labs.google" in p.url or "flow" in p.url), None)
+        if not page:
+            page = context.new_page()
+            page.goto("https://labs.google/fx/th/tools/flow", wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_load_state("domcontentloaded", timeout=20000)
+        try:
+            page.bring_to_front()
+        except Exception:
+            pass
+        page.keyboard.press("Escape")
+        time.sleep(0.5)
+
+        # วีดีโอเดิม (เทียบหาตัวใหม่)
+        existing = page.locator("video").evaluate_all("els => els.map(e => e.src).filter(Boolean)")
+        existing_names = {_media_name(s) for s in existing if _media_name(s)}
+
+        # 1) อัปโหลดรูป product เข้า Flow (input[type=file] รับ image — ซ่อนอยู่)
+        page.locator("input[type='file']").first.set_input_files(image_path)
+        fname = os.path.basename(image_path)
+        print(f"[flow-img] อัปโหลด {fname}")
+        time.sleep(3)
+
+        # 2) เปิดเมนู '+' (add_2) ในแถบ composer
+        if not _click_text_trusted(page, "add_2", exact=False):
+            _click_text_trusted(page, "add", exact=False)
+        time.sleep(1.5)
+
+        # 3) เลือกรูปที่เพิ่งอัป + กด 'เพิ่มไปยังพรอมต์'
+        _click_text_trusted(page, fname, exact=False)
+        time.sleep(0.8)
+        if not _click_text_trusted(page, "เพิ่มไปยังพรอมต์", exact=True):
+            print("[flow-img] ⚠️ ไม่เจอ 'เพิ่มไปยังพรอมต์' — รูปอาจไม่แนบ (generate ต่อแบบ text)")
+        time.sleep(1.0)
+
+        # 4) พิมพ์ prompt ลงช่องที่มองเห็น
+        vis_idx = page.evaluate("""() => {
+          const t=[...document.querySelectorAll("[role='textbox'],textarea")];
+          for(let i=0;i<t.length;i++){const r=t[i].getBoundingClientRect(); if(r.width>10&&r.height>10) return i;}
+          return 0;
+        }""")
+        box = page.locator("[role='textbox'], textarea").nth(vis_idx)
+        box.click()
+        page.keyboard.press("Control+A")
+        page.keyboard.press("Delete")
+        time.sleep(0.3)
+        page.keyboard.insert_text(prompt)
+        print(f"[flow-img] พิมพ์ prompt: {prompt[:50]}")
+        time.sleep(0.8)
+
+        # 5) ส่ง (Enter)
+        page.keyboard.press("Enter")
+        time.sleep(3)
+
+        # 6) อนุมัติเครดิต (ลองหลายรอบ เผื่อ dialog โผล่ช้า)
+        for _ in range(6):
+            if _approve_credit(page):
+                break
+            time.sleep(1.0)
+
+        # 7) รอวีดีโอใหม่ (~10 นาที, คิวอาจนาน) — กด approve ซ้ำทุกรอบเผื่อ dialog ค้าง
+        print("[flow-img] รอวีดีโอใหม่ (สูงสุด ~10 นาที)...")
+        video_url = ""
+        for i in range(300):
+            try:
+                srcs = page.locator("video").evaluate_all("els => els.map(e => e.src).filter(Boolean)")
+            except Exception:
+                time.sleep(2)
+                continue
+            new = [s for s in srcs if "media.getMediaUrlRedirect" in s
+                   and _media_name(s) and _media_name(s) not in existing_names]
+            if new:
+                video_url = new[-1]
+                break
+            _approve_credit(page)
+            if i % 5 == 0:
+                try:
+                    body = page.evaluate("() => document.body.innerText")
+                    if any(k in body for k in ["เกินโควตา", "เครดิตไม่เพียงพอ", "หมดโควตา",
+                                               "out of credit", "quota exceeded", "สิทธิ์การใช้งานหมด"]):
+                        try:
+                            from ..services import system_state
+                            system_state.set_flow_blocked()
+                        except Exception:
+                            pass
+                        raise RuntimeError("โควตา/เครดิต Google Flow หมด — พัก Flow และใช้ระบบสำรอง")
+                except RuntimeError:
+                    raise
+                except Exception:
+                    pass
+            if i % 15 == 0:
+                print(f"[flow-img] ...รอวีดีโอใหม่ {i*2}s")
+            time.sleep(2)
+
+        if not video_url:
+            raise RuntimeError("Timeout รอวีดีโอ image-to-video (อาจคิวนาน/ไม่เริ่ม)")
+
+        # 8) โหลดวีดีโอผ่าน browser fetch → เซฟ .mp4
+        print(f"[flow-img] ✓ ได้วีดีโอ: {video_url[:70]}")
+        data_url = page.evaluate("""async (url) => {
+            const resp = await fetch(url); const blob = await resp.blob();
+            return await new Promise((res, rej) => {
+                const fr = new FileReader(); fr.onloadend = () => res(fr.result); fr.onerror = rej;
+                fr.readAsDataURL(blob);
+            });
+        }""", video_url)
+        video_bytes = base64.b64decode(data_url.split(",", 1)[1])
+
+        media_dir = settings.media_dir
+        if media_dir == "/app/data/media":
+            root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+            media_dir = os.path.join(root, "data", "media")
+        os.makedirs(media_dir, exist_ok=True)
+        dest = os.path.join(media_dir, f"i2v_{uuid.uuid4().hex[:8]}.mp4")
+        with open(dest, "wb") as f:
+            f.write(video_bytes)
+        print(f"[flow-img] ✅ บันทึก: {dest} ({len(video_bytes)} bytes)")
+        return dest
+    finally:
+        try:
+            pw.stop()
+        except Exception:
             pass

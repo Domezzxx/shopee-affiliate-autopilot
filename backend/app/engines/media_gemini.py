@@ -59,11 +59,16 @@ def generate_image(prompt: str) -> str:
         raise RuntimeError(f"ล้มเหลวในการสร้างรูปภาพผ่าน Gemini API: {e}")
 
 
-def generate_video(prompt: str) -> str:
-    """สร้างวีดีโอสั้น 9:16 ด้วย Google Flow Browser Automation (ฟรี) โดยมี fallback ไปที่ Veo API."""
+def generate_video(prompt: str, image_path: str = "") -> tuple[str, str]:
+    """สร้างวีดีโอสั้น 9:16 ด้วย Google Flow Browser Automation (ฟรี) โดยมี fallback ไปที่ Veo API.
+
+    image_path: ถ้ามีรูป product จริง → ทำ 'image-to-video' (วีดีโอตรงเมนูจริง) ก่อน,
+    ทำไม่ได้ค่อย fallback ไป text-to-video แล้วค่อย Veo API.
+    คืน (path, source) — source = 'flow' (Google Flow) หรือ 'veo' (Veo API).
+    """
     if not settings.enable_video:
         raise RuntimeError("ระบบสร้างวิดีโอถูกปิดอยู่ (ENABLE_VIDEO=false)")
-    
+
     # 0) ถ้า Flow ถูกพักอยู่ (เครดิตหมด) → ข้าม ไม่เสียเวลายิงซ้ำ
     try:
         from ..services import system_state
@@ -74,10 +79,18 @@ def generate_video(prompt: str) -> str:
     except Exception:
         pass
 
-    # 1) ลองรันด้วย Browser Automation (Flow) ก่อนเพื่อประหยัดเงินตามที่คุณกอล์ฟเลือก
+    # 1a) มีรูป product จริง → image-to-video ก่อน (วีดีโอตรงเมนูจริง = น่าเชื่อถือสุด)
+    if image_path and os.path.exists(image_path):
+        try:
+            from .flow_automation import generate_video_from_image
+            return generate_video_from_image(image_path, prompt), "flow"
+        except Exception as e:
+            print(f"[flow-img-fallback] image-to-video ล้มเหลว ({str(e)[:80]}) → ลอง text-to-video")
+
+    # 1b) ไม่มีรูป/ทำไม่ได้ → text-to-video ด้วย Browser Automation (Flow)
     try:
         from .flow_automation import generate_video_flow
-        return generate_video_flow(prompt)
+        return generate_video_flow(prompt), "flow"
     except Exception as e:
         print(f"[flow-auto-fallback] Failed browser automation: {e}")
         print("[flow-auto-fallback] Attempting to fall back to Veo API...")
@@ -94,10 +107,10 @@ def generate_video(prompt: str) -> str:
                     op = client.operations.get(op)
                 vid = op.response.generated_videos[0]
                 os.makedirs(settings.media_dir, exist_ok=True)
-                path = os.path.join(settings.media_dir, f"video_flow_{uuid.uuid4().hex[:8]}.mp4")
+                path = os.path.join(settings.media_dir, f"veo_{uuid.uuid4().hex[:8]}.mp4")
                 client.files.download(file=vid.video)
                 vid.video.save(path)
-                return path
+                return path, "veo"
             except Exception as api_err:
                 print(f"[gemini] veo api error: {api_err}")
                 raise RuntimeError(f"การรันด้วย Veo API ล้มเหลว: {api_err}")
@@ -148,61 +161,76 @@ def generate_food_broll(dish: str, n: int = 6) -> list[str]:
     return out
 
 
-def make_media(image_prompt: str, video_prompt: str, hook: str = "", voiceover_script: str = "", label: str = "A") -> tuple[str, str, str]:
-    """คืน (media_type, media_path, image_path) ตาม VIDEO_MODE.
-    image_path = ภาพต้นฉบับ เก็บไว้ใช้ทำคลิปรวม (montage) ภายหลัง.
-    image  = ภาพนิ่ง 9:16 (ฟรี) · ffmpeg = ภาพ AI → วีดีโอ Reels ฟรี · veo = Veo (เสียเงิน)."""
+def _voice_script(voiceover_script: str, hook: str) -> str:
+    """บทพากย์ไทย 'รับประกันไม่ว่าง' — ถ้า AI ไม่ส่งบทมา ใช้ hook, ไม่มีก็ใช้ประโยคปิดการขายมาตรฐาน.
+    → ทุกคลิปมีเสียงไทยเสมอ."""
+    s = (voiceover_script or "").strip()
+    if s:
+        return s
+    h = (hook or "").strip()
+    if h:
+        return h
+    return "ร้านนี้เด็ดจริง อร่อยคุ้มราคา สั่งผ่าน Shopee Food ได้เลย ลิงก์อยู่ในคอมเมนต์!"
+
+
+def _narrate_image(ff: str, img: str, script: str, voice: str) -> str | None:
+    """ภาพ AI → วีดีโอ Ken Burns + เสียงพากย์ไทย (ยาวเท่าเสียง) + ซับเด้ง + เพลง. คืน path หรือ None."""
+    from . import video_ffmpeg
+    narr, ass = video_ffmpeg.build_voice_captions(ff, script, voice)
+    if not narr:
+        return None
+    vdur = video_ffmpeg._duration(narr) or max(3, settings.video_seconds)
+    seg = video_ffmpeg._scene_clip(ff, img, "", vdur, 0)
+    if not seg:
+        return None
+    out_vid = os.path.join(settings.media_dir, f"aireel_{uuid.uuid4().hex[:8]}.mp4")
+    final = video_ffmpeg._mux_audio(ff, seg, narr, ass, out_vid)   # cleans narr+ass
+    if os.path.exists(seg):
+        try:
+            os.remove(seg)
+        except Exception:
+            pass
+    return final
+
+
+def make_media(image_prompt: str, video_prompt: str, hook: str = "", voiceover_script: str = "", label: str = "A", product_image: str = "") -> tuple[str, str, str, str]:
+    """คืน (media_type, media_path, image_path, media_source) ตาม VIDEO_MODE — **ทุกคลิปมีเสียงพากย์ไทยเสมอ**.
+    media_source = flow (Google Flow) | veo | ffmpeg | image — ใช้กรองใน Dashboard.
+    image_path = ภาพต้นฉบับ เก็บไว้ใช้ทำคลิปรวม montage. product_image = รูป Shopee จริง → image-to-video."""
+    from . import video_ffmpeg
     mode = settings.video_mode
     voice = "th-TH-PremwadeeNeural" if label == "A" else "th-TH-NiwatNeural"
+    script = _voice_script(voiceover_script, hook)
+    ff = video_ffmpeg.find_ffmpeg() if settings.enable_voiceover else ""
 
+    # === โหมดวีดีโอจริง (Flow/Veo image-to-video) → พากย์ไทยทับ ===
     if mode == "veo" or (settings.enable_video and mode == "image"):
-        vid = generate_video(video_prompt)
-        from . import video_ffmpeg
+        vid, source = generate_video(video_prompt, image_path=product_image)   # source = flow | veo
         img = video_ffmpeg.extract_frame(vid) or ""
-        # Add voiceover and subtitles to Veo/Automation video if voiceover is enabled
-        if settings.enable_voiceover and voiceover_script:
-            ff = video_ffmpeg.find_ffmpeg()
-            if ff:
-                out_vid = os.path.join(settings.media_dir, f"video_flow_{uuid.uuid4().hex[:8]}.mp4")
-                final = video_ffmpeg.add_audio(ff, vid, voiceover_script, out_vid, voice)
-                if final:
-                    if os.path.exists(vid) and "video_flow" not in os.path.basename(vid):
-                        try:
-                            os.remove(vid)
-                        except:
-                            pass
-                    vid = final
-        return "video", vid, img
+        if ff and script:
+            out_vid = os.path.join(settings.media_dir, f"{source}_voiced_{uuid.uuid4().hex[:8]}.mp4")
+            final = video_ffmpeg.add_audio(ff, vid, script, out_vid, voice)   # แทนเสียง Veo ด้วยพากย์ไทย
+            if final:
+                if os.path.exists(vid):
+                    try:
+                        os.remove(vid)
+                    except Exception:
+                        pass
+                vid = final
+            else:
+                print("[voice] ⚠️ ใส่พากย์ไทยลงวีดีโอ Flow ไม่สำเร็จ (TTS อาจล่ม) — ใช้คลิปเดิม")
+        return "video", vid, img, source
 
-    if mode == "ffmpeg":
-        img = generate_image(image_prompt)
-        from . import video_ffmpeg
-        # If voiceover is enabled and we have a script, generate a video synchronized to the voiceover
-        if settings.enable_voiceover and voiceover_script:
-            ff = video_ffmpeg.find_ffmpeg()
-            if ff:
-                # 1. Generate narration and subtitles
-                narr, ass = video_ffmpeg.build_voice_captions(ff, voiceover_script, voice)
-                if narr:
-                    vdur = video_ffmpeg._duration(narr) or max(3, settings.video_seconds)
-                    # 2. Generate scene clip with exact duration of the voiceover
-                    seg = video_ffmpeg._scene_clip(ff, img, "", vdur, 0)
-                    if seg:
-                        out_vid = os.path.join(settings.media_dir, f"video_flow_{uuid.uuid4().hex[:8]}.mp4")
-                        # 3. Mix audio (narration, music, subtitles)
-                        # _mux_audio cleans up narr and ass automatically
-                        final = video_ffmpeg._mux_audio(ff, seg, narr, ass, out_vid)
-                        if os.path.exists(seg):
-                            try:
-                                os.remove(seg)
-                            except:
-                                pass
-                        if final:
-                            return "video", final, img
-        
-        # Fallback to silent video with only hook text if voiceover is not enabled or failed
-        vid = video_ffmpeg.image_to_reel(img, hook)
-        return ("video", vid, img) if vid else ("image", img, img)
-
+    # === โหมด ffmpeg / image → ภาพ AI กลายเป็นวีดีโอพากย์ไทย (image mode เดิมเงียบ → ตอนนี้มีเสียง) ===
     img = generate_image(image_prompt)
-    return "image", img, img
+    if ff and script:
+        narrated = _narrate_image(ff, img, script, voice)
+        if narrated:
+            return "video", narrated, img, "ffmpeg"
+        print("[voice] ⚠️ ทำวีดีโอพากย์จากภาพไม่สำเร็จ (TTS อาจล่ม) — fallback")
+
+    # fallback: ไม่มี ffmpeg/TTS → วีดีโอเงียบมี hook (โหมด ffmpeg) หรือภาพนิ่ง
+    if mode == "ffmpeg":
+        vid = video_ffmpeg.image_to_reel(img, hook)
+        return ("video", vid, img, "ffmpeg") if vid else ("image", img, img, "image")
+    return "image", img, img, "image"

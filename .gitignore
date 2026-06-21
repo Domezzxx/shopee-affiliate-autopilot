@@ -33,3 +33,6 @@ tools/
 Thumbs.db
 
 .vercel
+
+# Claude Code local config (preview/launch)
+.claude/

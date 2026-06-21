@@ -1,8 +1,12 @@
 FROM python:3.11-slim
 
-# ffmpeg = เผื่อ post-process วีดีโอ / android-tools-adb = คุม phone farm
+# ffmpeg = ทำคลิป/ใส่เสียง · fonts-thai = ซับไทยไม่เป็นกล่อง · adb = คุม phone farm · tzdata = เวลาไทย
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONIOENCODING=utf-8 \
+    DATA_DIR=/app/data \
+    TZ=Asia/Bangkok
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ffmpeg android-tools-adb curl \
+        ffmpeg fonts-thai-tlwg android-tools-adb curl tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
