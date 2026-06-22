@@ -39,9 +39,12 @@ services:
       - N8N_DIAGNOSTICS_ENABLED=false
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=db
-      - DB_POSTGRESDB_DATABASE=n8n
-      - DB_POSTGRESDB_USER=n8n
-      - DB_POSTGRESDB_PASSWORD=n8n_pass
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER:-n8n}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-n8n_pass}
+      # 🔑 ย้ายเครื่อง: ตรึง encryption key ไว้ใน .env — ไม่งั้น n8n จะสุ่มใหม่ทุกเครื่อง
+      #   แล้ว credential ที่ย้ายมาใน DB จะถอดรหัสไม่ได้ (ตัวการลับที่ทำให้ย้ายเครื่องพัง)
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       # backend อยู่ในเครื่องโฮสต์ (รันแบบ native) เรียกผ่าน host.docker.internal
       - BACKEND_URL=http://host.docker.internal:8088
     extra_hosts:
@@ -50,18 +53,27 @@ services:
       - ./n8n/workflows:/home/node/workflows   # import workflow จากที่นี่
       - n8n_data:/home/node/.n8n
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:16-alpine
     container_name: affiliate-db
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=n8n
-      - POSTGRES_PASSWORD=n8n_pass
-      - POSTGRES_DB=n8n
+      - POSTGRES_USER=${POSTGRES_USER:-n8n}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-n8n_pass}
+      - POSTGRES_DB=${POSTGRES_DB:-n8n}
     volumes:
       - db_data:/var/lib/postgresql/data
+      # 📦 ย้ายเครื่อง: ไฟล์ .sql ใน ./data/db_init จะถูก import อัตโนมัติ "ครั้งแรกที่ DB ว่าง"
+      #   (= ตอน docker compose up บนเครื่องใหม่) → workflow/credential n8n กลับมาเอง
+      - ./data/db_init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-n8n} -d ${POSTGRES_DB:-n8n}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   n8n_data:

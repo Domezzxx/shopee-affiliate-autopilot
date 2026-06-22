@@ -12,6 +12,8 @@ docker compose up -d --build
 # Dashboard → http://localhost:8088   ·   n8n → http://localhost:5678
 ```
 
+> 🚚 ย้ายเครื่อง / รันหลายเครื่อง: อ่าน **[docs/MOVE_MACHINE.md](docs/MOVE_MACHINE.md)** — ก๊อป `./data` + `.env` แล้ว `docker compose up -d` จบ (DB + n8n credential ตามไปครบ)
+
 ## สถาปัตยกรรม
 ```
  n8n scraper ──POST /api/ingest──▶ Backend (FastAPI :8088) ──▶ SQLite + สื่อ
