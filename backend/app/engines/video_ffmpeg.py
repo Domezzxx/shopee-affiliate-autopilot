@@ -255,6 +255,9 @@ def _build_ass(segs: list[tuple[str, float, float]]) -> str:
 def build_voice_captions(ff: str, script: str, voice: str | None):
     """แยกพากย์ทีละบรรทัด → วัดเวลาจริง → คืน (ไฟล์เสียงรวม, ไฟล์ซับ ASS ที่ซิงค์)."""
     from . import voice_tts
+    import re as _re
+    # ตัด emoji ออกจากบทพากย์/ซับ — กัน TTS อ่านเพี้ยน (เช่น 🍜) + ซับไม่มี emoji รก
+    script = _re.sub(r"[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF←-⇿⬀-⯿️]", "", script or "")
     lines = _caption_lines(script)
     if not lines:
         return None, None

@@ -108,7 +108,14 @@ class Settings(BaseSettings):
 
     @property
     def phone_list(self) -> list[str]:
-        return [d.strip() for d in self.phone_farm_devices.split(",") if d.strip()]
+        # รับเฉพาะ host:port จริง — กันคอมเมนต์/ค่าขยะที่หลุดจาก .env (เช่น "# เช่น 192.168.1.51:5555")
+        import re
+        out = []
+        for d in self.phone_farm_devices.split(","):
+            d = d.strip()
+            if d and not d.startswith("#") and re.match(r"^[\w.\-]+:\d+$", d):
+                out.append(d)
+        return out
 
     @property
     def has_claude(self) -> bool:
