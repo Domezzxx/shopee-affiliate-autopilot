@@ -7,6 +7,25 @@ from playwright.sync_api import sync_playwright
 from ..config import settings
 
 
+def _connect_cdp(pw):
+    """เชื่อม Chrome CDP — รองรับ Docker.
+    ถ้า flow_cdp_url เป็น hostname (เช่น host.docker.internal) Chrome จะปฏิเสธด้วย
+    'Host header is specified and is not an IP address or localhost' → เลยดึง ws endpoint
+    เองโดยส่ง Host: localhost แล้วต่อ websocket ด้วย override เดิม. ถ้าเป็น localhost/IP ต่อตรงได้เลย."""
+    from urllib.parse import urlparse
+    url = (settings.flow_cdp_url or "http://127.0.0.1:9222").rstrip("/")
+    pu = urlparse(url)
+    host = pu.hostname or "127.0.0.1"
+    if host in ("localhost", "127.0.0.1") or re.match(r"^[0-9.]+$", host) or ":" in host:
+        return pw.chromium.connect_over_cdp(url)
+    import httpx
+    r = httpx.get(url + "/json/version", headers={"Host": "localhost"}, timeout=8)
+    r.raise_for_status()
+    ws = r.json()["webSocketDebuggerUrl"].replace(
+        "ws://localhost", f"ws://{host}:{pu.port or 9222}")
+    return pw.chromium.connect_over_cdp(ws, headers={"Host": "localhost"})
+
+
 def _media_name(src: str) -> str:
     """ดึง media name จาก url (...?name=XXXX#t=8.89) — เทียบตัวนี้ ไม่ใช่ทั้ง url ที่มี #fragment เปลี่ยน."""
     m = re.search(r"name=([^&#]+)", src or "")
@@ -166,7 +185,7 @@ def generate_video_flow(prompt: str) -> str:
     # 1) Connect to Chrome CDP
     pw = sync_playwright().start()
     try:
-        browser = pw.chromium.connect_over_cdp(settings.flow_cdp_url)
+        browser = _connect_cdp(pw)
     except Exception as e:
         pw.stop()
         print(f"[flow-auto] Connection failed: {e}")
@@ -435,7 +454,7 @@ def generate_video_from_image(image_path: str, prompt: str) -> str:
     pw = sync_playwright().start()
     try:
         try:
-            browser = pw.chromium.connect_over_cdp(settings.flow_cdp_url)
+            browser = _connect_cdp(pw)
         except Exception as e:
             pw.stop()
             raise RuntimeError(f"เชื่อม Chrome 9222 ไม่ได้: {e}") from e

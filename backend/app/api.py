@@ -283,9 +283,22 @@ def open_chrome_endpoint():
         except Exception:
             return False
             
-    if is_port_open(9222):
-        return {"status": "already_open", "message": "เปิด Google Flow (port 9222) อยู่แล้ว"}
-        
+    # host Chrome เชื่อมได้อยู่แล้ว? — รองรับ Docker: เช็คผ่าน FLOW_CDP_URL (host.docker.internal)
+    #   โดยส่ง Host: localhost เพื่อข้าม CDP host-header check ของ Chrome
+    def cdp_reachable() -> bool:
+        import httpx
+        from urllib.parse import urlparse
+        url = (settings.flow_cdp_url or "http://127.0.0.1:9222").rstrip("/")
+        host = urlparse(url).hostname or "127.0.0.1"
+        hdr = {} if host in ("localhost", "127.0.0.1") else {"Host": "localhost"}
+        try:
+            return httpx.get(url + "/json/version", headers=hdr, timeout=4).status_code == 200
+        except Exception:
+            return False
+
+    if cdp_reachable() or is_port_open(9222):
+        return {"status": "already_open", "message": "เชื่อม Google Flow (Chrome 9222) ได้แล้ว — พร้อมใช้งาน"}
+
     chrome_paths = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
@@ -293,7 +306,21 @@ def open_chrome_endpoint():
     ]
     chrome_exe = next((p for p in chrome_paths if os.path.exists(p)), None)
     if not chrome_exe:
-        raise HTTPException(status_code=500, detail="ไม่พบ Google Chrome ในเครื่องของคุณ กรุณาติดตั้ง Chrome หรือตรวจสอบโฟลเดอร์ติดตั้ง")
+        # อยู่ใน Docker (Linux container) — launch เองไม่ได้ → สั่ง Flow host agent บนโฮสต์ผ่าน trigger file
+        #   (agent เห็นไฟล์ใน data/ ที่ mount ร่วม แล้วเปิด Chrome ให้) จากนั้นรอจน CDP พร้อม = จบในคลิกเดียว
+        try:
+            with open(os.path.join(settings.data_dir, ".flow_launch_request"), "w") as f:
+                f.write(str(time.time()))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"เขียน trigger เปิด Chrome ไม่ได้: {e}")
+        for _ in range(30):
+            time.sleep(1)
+            if cdp_reachable():
+                return {"status": "launched", "message": "เปิด Google Flow บนเครื่องโฮสต์ให้แล้ว — พร้อมใช้งาน"}
+        raise HTTPException(status_code=504, detail=(
+            "สั่งเปิด Chrome บนโฮสต์แล้วแต่ยังไม่ตอบใน 30 วิ — ตรวจว่า Flow host agent รันอยู่ "
+            "(ติดตั้งครั้งเดียว: scripts\\install_flow_host_agent.ps1)"
+        ))
         
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     profile_dir = os.path.join(project_root, "data", "chrome_profile")
