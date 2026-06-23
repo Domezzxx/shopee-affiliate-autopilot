@@ -77,6 +77,11 @@ class Settings(BaseSettings):
     shopee_affiliate_app_id: str = ""
     shopee_affiliate_secret: str = ""
 
+    # Security — ถ้าตั้งค่า (เช่นตอนเปิด public ผ่าน Funnel) ทุก /api/* ต้องส่ง
+    # header X-API-Token (หรือ Authorization: Bearer) ให้ตรง ไม่งั้น 401.
+    # เว้นว่าง = ไม่บังคับ (โหมด local เดิม). /health และ /media ไม่ต้องใช้ token.
+    api_token: str = ""
+
     # ระบบ
     posting_mode: str = "hybrid"          # hybrid | api | phone
     shopee_min_rating: float = 4.5

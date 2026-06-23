@@ -13,7 +13,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import router as api_router
@@ -23,6 +23,24 @@ from .services import pipeline
 
 app = FastAPI(title="Affiliate Autopilot", version="1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.middleware("http")
+async def _api_token_guard(request, call_next):
+    """ถ้าตั้ง API_TOKEN ใน .env → ทุก /api/* (ยกเว้น preflight OPTIONS) ต้องส่ง
+    X-API-Token (หรือ Authorization: Bearer) ให้ตรง ไม่งั้น 401.
+    /health และ /media ไม่ถูกบังคับ (health check + IG ต้องดึงสื่อ public ได้)."""
+    token = settings.api_token
+    if token and request.method != "OPTIONS" and request.url.path.startswith("/api"):
+        sent = request.headers.get("x-api-token", "")
+        if not sent:
+            auth = request.headers.get("authorization", "")
+            if auth[:7].lower() == "bearer ":
+                sent = auth[7:]
+        if sent != token:
+            return JSONResponse(
+                {"detail": "unauthorized — missing/invalid API token"}, status_code=401)
+    return await call_next(request)
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 
