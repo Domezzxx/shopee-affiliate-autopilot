@@ -10,6 +10,14 @@ $runner = Join-Path $root "scripts\run_server.py"
 $log    = Join-Path $root "data\watchdog.log"
 $ts     = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
+# 0) keep ngrok tunnel alive (free static domain -> backend) - singleton, start if down
+$ngrok = Join-Path $PSScriptRoot "ngrok.exe"
+if ((Test-Path $ngrok) -and -not (Get-Process ngrok -ErrorAction SilentlyContinue)) {
+    $nlog = Join-Path $PSScriptRoot "ngrok.log"
+    Start-Process -FilePath $ngrok -ArgumentList 'http','--domain=busload-uncloak-rehydrate.ngrok-free.dev','8088','--log',$nlog,'--log-format','logfmt' -WindowStyle Hidden
+    try { Add-Content -Path $log -Value "$ts ngrok started" -ErrorAction SilentlyContinue } catch {}
+}
+
 # 1) healthy? -> done
 $healthy = $false
 try { if ((Invoke-RestMethod "http://127.0.0.1:8088/health" -TimeoutSec 5 -ErrorAction Stop).status -eq "ok") { $healthy = $true } } catch {}
