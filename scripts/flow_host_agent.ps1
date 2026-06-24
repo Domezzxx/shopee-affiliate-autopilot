@@ -1,8 +1,9 @@
 # ============================================================
-#  Flow Host Agent (ASCII-only)
-#  ตัวกลางบนโฮสต์: ให้ backend ที่อยู่ใน Docker สั่งเปิด Chrome (Google Flow,
-#  remote-debugging 9222) บนเครื่องโฮสต์ได้ — ผ่าน "trigger file" ใน ./data ที่ mount ร่วมกัน
-#    backend เขียน  data/.flow_launch_request  -> agent เห็น -> เปิด Chrome -> ลบ trigger
+#  Flow Host Agent (ASCII-only) — keeper + singleton
+#  ตัวกลางบนโฮสต์: ทำให้ Chrome (Google Flow, remote-debugging 9222) "พร้อมเสมอ"
+#   - keeper: ถ้า Chrome 9222 ดับ -> เปิดให้เองอัตโนมัติ (มี cooldown กันสแปม)
+#   - on-demand: backend (ใน Docker) เขียน data/.flow_launch_request -> เปิดทันที
+#   - singleton: ตอนเริ่มจะฆ่า agent ตัวเก่าทิ้ง เหลือตัวเดียว (กันแย่ง profile)
 #  รันค้างเป็น Scheduled Task (ดู install_flow_host_agent.ps1)
 # ============================================================
 $ErrorActionPreference = "Continue"
@@ -20,7 +21,7 @@ function Test-Cdp {
 }
 
 function Launch-Flow {
-    if (Test-Cdp) { W "chrome 9222 already up - skip"; return }
+    if (Test-Cdp) { return }
     $exe = @(
         "C:\Program Files\Google\Chrome\Application\chrome.exe",
         "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
@@ -28,20 +29,31 @@ function Launch-Flow {
     ) | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $exe) { W "ERROR: chrome.exe not found"; return }
     New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
-    # โปรไฟล์เฉพาะ (data/chrome_profile) = แยกจาก Chrome หลักของผู้ใช้ ไม่ต้อง kill อะไร
     Start-Process -FilePath $exe -ArgumentList "--remote-debugging-port=9222 --user-data-dir=`"$profileDir`" --no-first-run --no-default-browser-check https://labs.google/fx/tools/flow"
     W "launched chrome (debug profile, port 9222)"
 }
 
+# --- singleton: ฆ่า agent ตัวอื่นทิ้ง เหลือเฉพาะตัวนี้ ---
+try {
+    Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'flow_host_agent' -and $_.ProcessId -ne $PID } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+} catch {}
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-W "flow host agent started (watching $req)"
+"$PID" | Out-File (Join-Path $dataDir ".flow_agent.pid") -Encoding ascii -Force
+W "flow host agent started (keeper+singleton, pid $PID)"
+
+$lastLaunch = (Get-Date).AddMinutes(-1)
 while ($true) {
     try {
-        if (Test-Path $req) {
-            Remove-Item $req -Force -ErrorAction SilentlyContinue
-            W "launch request received"
-            Launch-Flow
+        $force = $false
+        if (Test-Path $req) { Remove-Item $req -Force -ErrorAction SilentlyContinue; W "launch request"; $force = $true }
+        if (-not (Test-Cdp)) {
+            if ($force -or ((Get-Date) - $lastLaunch).TotalSeconds -gt 20) {
+                Launch-Flow
+                $lastLaunch = Get-Date
+            }
         }
     } catch { W "loop err: $($_.Exception.Message)" }
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 5
 }
