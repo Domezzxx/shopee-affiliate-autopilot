@@ -15,8 +15,10 @@ const getMediaUrl = (url) => {
   return (backendUrl ? backendUrl : "") + url;
 };
 
-const api = async (path, opts) => {
-  const r = await fetch(getApiUrl(path), opts);
+const api = async (path, opts = {}) => {
+  const headers = { ...(opts.headers || {}), "ngrok-skip-browser-warning": "true" };
+  if (window.API_TOKEN) headers["X-API-Token"] = window.API_TOKEN;   // ผ่าน auth ของ backend (Funnel/ngrok)
+  const r = await fetch(getApiUrl(path), { ...opts, headers });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
   return r.json();
 };

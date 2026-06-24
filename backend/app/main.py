@@ -9,11 +9,12 @@ except AttributeError:
     pass
 
 import asyncio
+import json
 import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import router as api_router
@@ -101,4 +102,10 @@ app.mount("/static", StaticFiles(directory=STATIC, check_dir=False), name="stati
 
 @app.get("/")
 def home():
+    # inject API token เข้าหน้า dashboard → app.js ส่ง X-API-Token เองได้ (เปิดผ่าน Funnel/ngrok)
+    if settings.api_token:
+        html = open(os.path.join(STATIC, "index.html"), encoding="utf-8").read()
+        inject = f'<script>window.API_TOKEN={json.dumps(settings.api_token)};</script>'
+        html = html.replace("</head>", inject + "</head>", 1)
+        return HTMLResponse(html)
     return FileResponse(os.path.join(STATIC, "index.html"))
