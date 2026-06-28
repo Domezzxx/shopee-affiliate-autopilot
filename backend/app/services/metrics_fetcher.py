@@ -73,12 +73,13 @@ def _fetch_instagram(media_id: str) -> tuple[int, int, int]:
     """IG reel/media insights: reach/plays + likes+comments+saves+shares."""
     tok = settings.meta_access_token
     try:
+        # IG Reels: metric ชื่อ 'views' (ไม่ใช่ 'plays' ที่ deprecated)
         ins = httpx.get(f"{GRAPH}/{media_id}/insights",
-                        params={"metric": "reach,plays,likes,comments,saved,shares",
+                        params={"metric": "reach,views,likes,comments,saved,shares",
                                 "access_token": tok}, timeout=30).json()
         vals = {d.get("name"): _num((d.get("values") or [{}])[0].get("value"))
                 for d in ins.get("data", [])}
-        imp = vals.get("plays") or vals.get("reach") or 0
+        imp = vals.get("views") or vals.get("reach") or 0
         eng = sum(vals.get(k, 0) for k in ("likes", "comments", "saved", "shares"))
         return imp, 0, eng
     except Exception:
