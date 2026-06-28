@@ -411,7 +411,14 @@ def abtest_result(store_id: int) -> dict:
 
 
 def auto_optimize() -> dict:
-    """ขั้น 5: ร้าน CTR ต่ำ 3 วันติด → pause (ประหยัด cost). คืนสรุปการกระทำ."""
+    """ขั้น 5: ดึง metric จริง → ร้าน CTR ต่ำ 3 วันติด pause → อัปเดตบทเรียน. คืนสรุป."""
+    # 0) ดึงสถิติจริงจาก FB/IG/YT ก่อน (ป้อน metric ให้ learning loop)
+    fetched = {}
+    try:
+        from . import metrics_fetcher
+        fetched = metrics_fetcher.fetch_all()
+    except Exception as e:  # pragma: no cover
+        print(f"[metrics] fetch fail: {e}")
     actions = []
     with get_session() as s:
         for store in s.exec(select(Store).where(Store.status == "active")).all():
@@ -436,4 +443,4 @@ def auto_optimize() -> dict:
     except Exception as e:  # pragma: no cover
         print(f"[learning] build fail: {e}")
     return {"ran_at": datetime.utcnow().isoformat(), "actions": actions,
-            "insights_ready": insights.get("ready", False)}
+            "metrics_fetched": fetched, "insights_ready": insights.get("ready", False)}

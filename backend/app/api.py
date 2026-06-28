@@ -568,6 +568,13 @@ def push_metric(m: MetricIn):
     return {"ok": True, "ctr": ctr}
 
 
+@router.post("/metrics/fetch")
+def fetch_metrics():
+    """ดึงสถิติจริงจาก FB/IG/YouTube (impressions/engagement) → เก็บลง Metric → ป้อน learning loop."""
+    from .services import metrics_fetcher
+    return metrics_fetcher.fetch_all()
+
+
 @router.post("/metrics/simulate")
 def simulate_metrics():
     """โหมดเดโม: สุ่มผลให้โพสต์ทั้งหมด เพื่อเห็น A/B + auto-optimize ทำงานทันที."""
