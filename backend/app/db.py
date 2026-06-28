@@ -67,6 +67,8 @@ class Variant(SQLModel, table=True):
     cta: str = ""
     first_comment: str = ""          # ข้อความคอมเมนต์แรก (วาง affiliate link)
     voiceover_script: str = ""
+    spoken_lang: str = ""            # ภาษาบทพูดในคลิป: thai | english | isaan (ใช้เรียนรู้ว่าภาษาไหนปัง)
+    spoken_line: str = ""            # บทพูดที่คนในคลิปพูด (hook)
     image_prompt: str = ""
     video_prompt: str = ""
     media_type: str = "image"        # image | video
@@ -113,7 +115,8 @@ def _migrate() -> None:
     inspector = inspect(engine)
     new_cols = {
         "variant": [("first_comment", "TEXT DEFAULT ''"), ("image_path", "TEXT DEFAULT ''"),
-                    ("video_title", "TEXT DEFAULT ''"), ("media_source", "TEXT DEFAULT ''")],
+                    ("video_title", "TEXT DEFAULT ''"), ("media_source", "TEXT DEFAULT ''"),
+                    ("spoken_lang", "TEXT DEFAULT ''"), ("spoken_line", "TEXT DEFAULT ''")],
         "post": [("comment_id", "TEXT DEFAULT ''"), ("comment_status", "TEXT DEFAULT ''")],
         "store": [("reel_url", "TEXT DEFAULT ''"), ("requires_approval", "BOOLEAN DEFAULT FALSE")],
     }

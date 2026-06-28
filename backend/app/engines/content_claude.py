@@ -110,6 +110,16 @@ SYSTEM = (
 )
 
 
+def _learned_guidance() -> str:
+    """ดึง 'บทเรียนจากผลงานจริง' (self-improvement loop) มาฉีดเข้า prompt — ทำให้บอทฉลาดขึ้นเรื่อยๆ.
+    ถ้าข้อมูลยังไม่พอจะคืน '' (ไม่กระทบ prompt)."""
+    try:
+        from ..services.learning import insights_prompt
+        return insights_prompt()
+    except Exception:
+        return ""
+
+
 def _prompt(store: dict, label: str) -> str:
     if label == "A":
         style_desc = (
@@ -162,6 +172,7 @@ def _prompt(store: dict, label: str) -> str:
         f"6. spoken_line แต่ละ platform ต้องเปิดด้วย 'สูตร hook' คนละแบบดังนี้ (คำแรกสุดต้องโดนใน 1 วิ ห้ามขึ้นต้นซ้ำกัน): "
         f"facebook={hooks[0]} · instagram={hooks[1]} · youtube={hooks[2]}\n"
         f"7. ตอบกลับตามโครงสร้าง JSON_SKELETON ที่ระบุ"
+        + _learned_guidance()
     )
 
 

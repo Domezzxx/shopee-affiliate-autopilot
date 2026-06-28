@@ -90,6 +90,7 @@ def generate_for_store(store_id: int) -> dict:
                 hashtags_json=json.dumps(v["hashtags"], ensure_ascii=False),
                 cta=v["cta"], first_comment=v.get("first_comment", ""),
                 voiceover_script=v["voiceover_script"],
+                spoken_lang=v.get("spoken_lang", ""), spoken_line=v.get("spoken_line", ""),
                 image_prompt=v["image_prompt"], video_prompt=v["video_prompt"],
                 media_type=mtype, media_path=mpath, image_path=ipath, media_source=msource,
             ))
@@ -427,4 +428,12 @@ def auto_optimize() -> dict:
                 store.low_ctr_days = 0
             s.add(store)
         s.commit()
-    return {"ran_at": datetime.utcnow().isoformat(), "actions": actions}
+    # self-improvement loop: อัปเดต 'บทเรียน' จากผลงานจริงทุกรอบ → ป้อนกลับเข้าการเขียนคอนเทนต์
+    insights = {}
+    try:
+        from . import learning
+        insights = learning.build_insights()
+    except Exception as e:  # pragma: no cover
+        print(f"[learning] build fail: {e}")
+    return {"ran_at": datetime.utcnow().isoformat(), "actions": actions,
+            "insights_ready": insights.get("ready", False)}

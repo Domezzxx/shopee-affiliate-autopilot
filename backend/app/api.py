@@ -594,6 +594,21 @@ def run_optimize():
     return pipeline.auto_optimize()
 
 
+# ----------------------------------------------------------------- self-improvement (บอทเรียนรู้จากผลงานจริง)
+@router.get("/insights")
+def get_insights():
+    """บทเรียนที่บอทสรุปจากผลงานจริง (CTR ต่อ ภาษา/รูปแบบ/แพลตฟอร์ม + hook ที่ปัง)."""
+    from .services import learning
+    return learning.get_insights()
+
+
+@router.post("/insights/rebuild")
+def rebuild_insights():
+    """สั่งรวมผลงานใหม่ทันที (ปกติอัปเดตเองทุกรอบ auto-optimize)."""
+    from .services import learning
+    return learning.build_insights()
+
+
 # ----------------------------------------------------------------- รายงานสรุป (Sprint 6 P3)
 @router.get("/report/daily")
 def report_daily():
