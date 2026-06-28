@@ -193,7 +193,7 @@ def _narrate_image(ff: str, img: str, script: str, voice: str) -> str | None:
     return final
 
 
-def make_media(image_prompt: str, video_prompt: str, hook: str = "", voiceover_script: str = "", label: str = "A", product_image: str = "") -> tuple[str, str, str, str]:
+def make_media(image_prompt: str, video_prompt: str, hook: str = "", voiceover_script: str = "", label: str = "A", product_image: str = "", spoken_line: str = "") -> tuple[str, str, str, str]:
     """คืน (media_type, media_path, image_path, media_source) ตาม VIDEO_MODE — **ทุกคลิปมีเสียงพากย์ไทยเสมอ**.
     media_source = flow (Google Flow) | veo | ffmpeg | image — ใช้กรองใน Dashboard.
     image_path = ภาพต้นฉบับ เก็บไว้ใช้ทำคลิปรวม montage. product_image = รูป Shopee จริง → image-to-video."""
@@ -207,7 +207,11 @@ def make_media(image_prompt: str, video_prompt: str, hook: str = "", voiceover_s
     if mode == "veo" or (settings.enable_video and mode == "image"):
         vid, source = generate_video(video_prompt, image_path=product_image)   # source = flow | veo
         img = video_ffmpeg.extract_frame(vid) or ""
-        if ff and script:
+        # ถ้ามี 'บทพูดให้คนในคลิปพูด' (multilingual) → คงเสียงจริงจาก Flow/Veo ไว้ ไม่ทับ TTS ไทย
+        has_dialogue = bool((spoken_line or "").strip()) and source in ("flow", "veo")
+        if has_dialogue:
+            print(f"[voice] คลิปมีบทพูดในตัว ({spoken_line[:30]}...) — คงเสียงจาก Flow ไม่ทับ TTS")
+        elif ff and script:
             out_vid = os.path.join(settings.media_dir, f"{source}_voiced_{uuid.uuid4().hex[:8]}.mp4")
             final = video_ffmpeg.add_audio(ff, vid, script, out_vid, voice)   # แทนเสียง Veo ด้วยพากย์ไทย
             if final:

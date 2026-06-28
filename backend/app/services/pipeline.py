@@ -82,7 +82,7 @@ def generate_for_store(store_id: int) -> dict:
         for i, v in enumerate(variants):
             _prog(store_id, name, f"🎬 สร้างสื่อ {i + 1}/{total}", 18 + int(i / total * 64),
                   detail=f"{v['platform']} · {v['label']}")
-            mtype, mpath, ipath, msource = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"], v["label"], product_image=product_img)
+            mtype, mpath, ipath, msource = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"], v["label"], product_image=product_img, spoken_line=v.get("spoken_line", ""))
             s.add(Variant(
                 content_job_id=job.id, store_id=store.id, label=v["label"],
                 platform=v["platform"], hook=v["hook"],

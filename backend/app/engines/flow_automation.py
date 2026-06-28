@@ -23,16 +23,24 @@ _EMOJI_RE = re.compile(
 def _clean_flow_prompt(prompt: str) -> str:
     """ทำ prompt ให้สะอาดก่อนส่ง Google Flow: ตัดภาษาไทย + emoji ออก, เหลืออังกฤษล้วน + สั่งห้ามมีข้อความในวีดีโอ.
     (รูป product จริงที่แนบไปบอก 'เมนูอะไร' อยู่แล้ว — prompt แค่บอกการเคลื่อนไหว/อารมณ์ภาพ)."""
-    p = _EMOJI_RE.sub("", prompt or "")
-    p = _THAI_RE.sub("", p)
+    # เก็บ 'บทพูด' ในเครื่องหมายคำพูด "..." ไว้ (ไทย/อีสาน) เพื่อให้ Veo สร้างคนพูดจริง —
+    # ตัดไทย+emoji เฉพาะส่วนคำบรรยายฉาก (นอกเครื่องหมายคำพูด) ป้องกันตัวหนังสือเพี้ยนลงจอ
+    parts = re.split(r'("[^"]*")', prompt or "")
+    out = []
+    for seg in parts:
+        if len(seg) >= 2 and seg.startswith('"') and seg.endswith('"'):
+            out.append(_EMOJI_RE.sub("", seg))   # บทพูด: เก็บไว้ (ตัดแค่ emoji)
+        else:
+            out.append(_THAI_RE.sub("", _EMOJI_RE.sub("", seg)))
+    p = "".join(out)
     p = re.sub(r"\s{2,}", " ", p)                # ยุบช่องว่างซ้ำที่ค้างจากการตัดคำ
-    p = re.sub(r"\s+([,.])", r"\1", p)           # " ," → "," , " ." → "."
     p = re.sub(r"(,\s*){2,}", ", ", p)           # ",, " → ", " (กรณีตัดคำระหว่างจุลภาค)
     p = p.strip(" ,.")
     if not p:
         p = "cinematic vertical 9:16 food review b-roll, appetizing, photorealistic"
-    if "no text" not in p.lower() and "no on-screen" not in p.lower():
-        p += ", no on-screen text, no captions, no words"
+    # ห้ามตัวหนังสือบนจอ/ซับ แต่ 'อนุญาตให้พูดได้' (ไม่ใส่ no words แล้ว)
+    if "no on-screen text" not in p.lower() and "no subtitles" not in p.lower():
+        p += ", no on-screen text, no subtitles, no captions"
     return p
 
 

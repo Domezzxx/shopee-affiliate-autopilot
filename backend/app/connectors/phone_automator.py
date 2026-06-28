@@ -95,26 +95,34 @@ def human_type(d: u2.Device, text: str):
     → แคปชั่นไทยออกมาเป็นตัวมั่ว. แก้: เปิด FastInputIME ของ uiautomator2 ก่อน
     (รองรับ Unicode/emoji) แล้วพิมพ์ทีละคำ + หน่วงสุ่มให้ดูเป็นมนุษย์ (anti-detection).
     """
-    import random
-    d.clear_text()
-    time.sleep(0.4)
+    # uiautomator2 ติดตั้ง IME ของตัวเอง (AdbKeyboard) และตั้งเป็น default ให้แล้ว → send_keys รองรับ unicode/ไทย
     try:
-        d.set_input_ime(True)          # สลับไป FastInputIME (Unicode) — สำคัญสุด
-        time.sleep(0.3)
-        for i, word in enumerate(text.split(" ")):
-            chunk = (" " if i else "") + word
-            d.send_keys(chunk, clear=False)            # ต่อท้ายทีละคำ (unicode-safe)
-            time.sleep(random.uniform(0.12, 0.35))     # จังหวะแบบมนุษย์
+        d.send_keys(text, clear=True)
         time.sleep(0.8)
         return
     except Exception as e:
-        logger.warning(f"[phone-farm] FastInputIME พิมพ์ไม่ได้ ({e}) → fallback ส่งทั้งข้อความ")
-        try:
-            d.clear_text(); time.sleep(0.3)
-            d.send_keys(text, clear=True)
-        except Exception as e2:
-            logger.error(f"[phone-farm] พิมพ์ caption ล้มเหลว: {e2}")
+        logger.warning(f"[phone-farm] send_keys ล้มเหลว ({e}) → fallback ADB_INPUT_B64")
+    # fallback: ส่งผ่าน AdbKeyboard broadcast แบบ base64 (กันตัวอักษรไทย/emoji เพี้ยน)
+    try:
+        import base64
+        b64 = base64.b64encode(text.encode("utf-8")).decode()
+        run_adb(d.serial, "shell", "am", "broadcast", "-a", "ADB_INPUT_B64", "--es", "msg", b64)
         time.sleep(1)
+    except Exception as e2:
+        logger.error(f"[phone-farm] พิมพ์ caption ล้มเหลว: {e2}")
+        time.sleep(1)
+
+
+def _click_first(selectors, timeout: int = 3) -> bool:
+    """กด selector ตัวแรกที่เจอบนจอ (รองรับ UI หลายเวอร์ชัน) — คืน True ถ้ากดได้."""
+    for sel in selectors:
+        try:
+            if sel.exists(timeout=timeout):
+                sel.click()
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def capture_debug_screenshot(d: u2.Device, platform: str):
@@ -142,91 +150,80 @@ def post_facebook_reel(device_ip: str, local_path: str, caption: str) -> dict:
         try:
             logger.info("[phone-farm] [Facebook] Launching App...")
             d.app_start("com.facebook.katana", stop=True)
-            time.sleep(6)
-            
-            # ค้นหาปุ่มบวกเพื่อสร้างโพสต์/Reel
-            logger.info("[phone-farm] [Facebook] Clicking Create Reel...")
-            # สแกนหาคำว่า "Reel" หรือปุ่มบวกไอคอน Reels
-            selectors = [
+            time.sleep(7)
+
+            # 1) เปิดหน้าสร้าง Reel — ปุ่มบนแถบสตอรี่ของฟีด (รองรับทั้งไทย/อังกฤษ ป้ายเปลี่ยนได้)
+            logger.info("[phone-farm] [Facebook] Open Reel composer...")
+            if not _click_first([
+                d(description="สร้างคลิป Reels"), d(text="สร้างคลิป Reels"),
+                d(descriptionContains="คลิป Reels"), d(textContains="คลิป Reels"),
+                d(description="Create reel"), d(text="Create reel"),
+                d(descriptionContains="Create reel"), d(textContains="Create reel"),
                 d(descriptionContains="Create a reel"),
                 d(descriptionContains="สร้างรีล"),
-                d(text="Reel"),
-                d(text="รีล"),
-                d(description="Create post"),
-                d(description="สร้างโพสต์")
-            ]
-            
-            clicked = False
-            for sel in selectors:
-                if sel.exists(timeout=2):
-                    sel.click()
-                    clicked = True
-                    break
-            
-            if not clicked:
-                # ลองกดปุ่ม "+" หลักบนหน้าฟีด Facebook
-                logger.info("[phone-farm] [Facebook] Selectors not found, trying fallback plus button...")
-                plus_btn = d(descriptionContains="Create")
-                if plus_btn.exists(timeout=2):
-                    plus_btn.click()
-                    time.sleep(2)
-                    d(text="Reel").click()
-                else:
-                    raise RuntimeError("Cannot locate Facebook Reels creation button")
-                    
-            time.sleep(3)
-            
-            # หน้าเลือกสื่อแกลเลอรี: วิดีโอล่าสุดจะอยู่ซ้ายบนสุด (ImageView ตัวแรก)
-            logger.info("[phone-farm] [Facebook] Selecting latest video...")
-            # FB Gallery Grid Item
-            d(className="android.widget.ImageView", instance=0).click(timeout=10)
-            time.sleep(4)
-            
-            # ถ้าเป็นวิดีโอและมีให้กด "ถัดไป" หรือ "Next"
-            next_btn = d(text="Next") if d(text="Next").exists() else d(text="ถัดไป")
-            if next_btn.exists(timeout=3):
-                next_btn.click()
-                time.sleep(2)
-                
-            # หน้าเขียนแคปชั่น
-            logger.info("[phone-farm] [Facebook] Entering caption...")
-            desc_field = d(resourceId="com.facebook.katana:id/caption_edit_text")
-            if not desc_field.exists():
-                desc_field = d(focused=True) # พุ่งเป้าไปที่ Textbox ที่โฟกัสอยู่
-                
-            if desc_field.exists(timeout=3):
-                desc_field.click()
-                human_type(d, caption)
-            else:
-                logger.warning("[phone-farm] [Facebook] Cannot find caption textbox, typing blindly...")
-                d.click(360, 400) # คลิกตรงกลางบนเพื่อเดาตำแหน่งกล่องข้อความ
-                time.sleep(1)
-                human_type(d, caption)
-                
-            # กดแชร์/แชร์รีล (Share Reel / Share Now)
-            logger.info("[phone-farm] [Facebook] Sharing Reel...")
-            share_selectors = [
-                d(text="Share Reel"),
-                d(text="แชร์รีล"),
-                d(text="แชร์เลย"),
-                d(text="Share Now")
-            ]
-            
-            shared = False
-            for sel in share_selectors:
-                if sel.exists(timeout=3):
-                    sel.click()
-                    shared = True
-                    break
-            
-            if not shared:
-                # ลองกดปุ่มขวาล่างสุด (เดาพิกัด)
-                w, h = d.window_size()
-                d.click(w - 150, h - 80)
-                logger.info("[phone-farm] [Facebook] Shared Reel using bottom right coordinates.")
-                
+                d(descriptionContains="reel"), d(descriptionContains="Reel"),
+            ], timeout=4):
+                raise RuntimeError("Cannot locate Facebook Reels creation button")
             time.sleep(5)
-            logger.info("[phone-farm] [Facebook] Post successfully submitted!")
+
+            # 2) เลือกวิดีโอที่เพิ่ง push — ในกริด composer ช่องวิดีโอจะระบุ desc ว่า 'ด้วย วิดีโอ'
+            #    (ตัวล่าสุด = ซ้ายบนสุด) ; เก่า: ใช้ ImageView ซึ่งเวอร์ชันใหม่ไม่มี
+            logger.info("[phone-farm] [Facebook] Selecting pushed video...")
+            if not _click_first([
+                d(descriptionContains="ด้วย วิดีโอ"),
+                d(descriptionContains="วิดีโอ,"),
+                d(descriptionContains="with video"),
+                d(descriptionContains="video,"),
+            ], timeout=10):
+                # fallback: ช่องกริดแรก
+                try:
+                    d(className="android.view.ViewGroup", clickable=True, instance=0).click(timeout=8)
+                except Exception:
+                    d.click(120, 540)
+            time.sleep(7)
+
+            # 3) หน้า edit (InspirationCamera) → ปุ่ม 'ถัดไป'/'Next' มุมขวาล่าง
+            logger.info("[phone-farm] [Facebook] Editor -> Next...")
+            _click_first([d(description="ถัดไป"), d(text="ถัดไป"),
+                          d(description="Next"), d(text="Next")], timeout=8)
+            time.sleep(6)
+
+            # 4) หน้าแคปชั่น (Immersive) → ช่อง 'อธิบายคลิป Reels ของคุณ'
+            #    หลังกดถัดไปมี transition (โหลด) ~หลายวิ → รอจนช่องแคปชั่นโผล่ (สูงสุด ~20 วิ)
+            logger.info("[phone-farm] [Facebook] Waiting for caption screen...")
+            cap = None
+            cap_keys = ["อธิบายคลิป", "เพิ่มคำอธิบาย", "Describe your reel", "Describe", "description"]
+            for _ in range(10):
+                for key in cap_keys:
+                    c = d(descriptionContains=key)
+                    if c.exists(timeout=1):
+                        cap = c
+                        break
+                if cap is not None:
+                    break
+                time.sleep(2)
+            if cap is not None:
+                logger.info("[phone-farm] [Facebook] Entering caption...")
+                cap.click()
+                time.sleep(1.2)
+                human_type(d, caption)
+                d.press("back")   # ปิดคีย์บอร์ดให้เห็นปุ่ม 'แชร์เลย'
+                time.sleep(1.5)
+            else:
+                logger.warning("[phone-farm] [Facebook] caption field not found — typing blindly")
+                d.click(360, 300); time.sleep(1); human_type(d, caption); d.press("back"); time.sleep(1.5)
+
+            # 5) กด 'แชร์เลย' (ปุ่มโพสต์สุดท้าย — มุมขวาล่าง)
+            logger.info("[phone-farm] [Facebook] Sharing...")
+            if not _click_first([
+                d(description="แชร์เลย"), d(text="แชร์เลย"),
+                d(description="Share now"), d(text="Share now"),
+                d(description="Share Now"), d(description="แชร์"), d(text="Share"),
+            ], timeout=6):
+                d.click(420, 1468)   # พิกัดปุ่ม 'แชร์เลย' โดยประมาณ (จอ 720x1608)
+            # รออัปโหลด/เผยแพร่ให้เสร็จก่อนปิดแอป (รีลวิดีโอใช้เวลา — ปิดเร็วไป = โพสต์ไม่ขึ้น)
+            time.sleep(30)
+            logger.info("[phone-farm] [Facebook] Post submitted (waited for upload).")
             return {"ok": True, "error": ""}
             
         except Exception as e:

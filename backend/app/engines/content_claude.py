@@ -88,7 +88,24 @@ SYSTEM = (
     "• A vs B ต้องคนละมุมจริง: A = สายคุ้ม/ดีล/ตัวเลข, B = สายฟิน/ดราม่าหิว/ASMR. ห้ามคล้ายกัน.\n"
     "• โทนต่อ platform: FB=อบอุ่นแชร์ได้, IG=ฮิปมินิมอล, YouTube=เล่าเรื่องปากต่อปาก.\n"
     "• caption สั้น มี emoji พอดี เว้นบรรทัด ปิดด้วย CTA · first_comment ใส่ {LINK} · hashtags 4-6 อัน.\n"
+    "• spoken_line + spoken_lang = 'บทพูดให้คนในคลิปพูดใส่กล้อง' — **1 ประโยคสั้นมาก ~6-12 คำ พูดจบสบายๆ ใน ~7 วินาที** "
+    "(คลิปยาวแค่ ~8 วิ → ห้ามยาวจนพูดไม่ทัน/ถูกตัดกลางประโยค). พูดจริงไม่ใช่บรรยาย.\n"
+    "  ★ กฎเหล็ก: **คำ 'แรกสุด' ของ spoken_line ต้องเป็น HOOK ที่สะกดให้หยุดนิ้วใน 1 วิ** (อย่าเปิดด้วยชื่อร้าน/คำทักทาย/คำเฝือ). "
+    "และคลิปต้อง 'เปิดมาที่คนพูดเลย' (บทพูดคือสิ่งแรกที่ได้ยิน).\n"
+    "  ★ หมุนเวียน 'สูตร hook' ให้ทุก variant คนละแบบ (ห้ามซ้ำสูตร/ห้ามขึ้นต้นเหมือนกัน): "
+    "(1) คำถามสะกิด (2) ตัวเลข/ราคาช็อก (3) คำสั่งห้าม (4) ขัดแย้ง/เกินคาด (5) ดราม่าหิว (6) ความลับ/อินไซต์.\n"
+    "  ★ spoken_lang เลือก thai | english | isaan ต้อง 'กระจายหลากหลาย' ข้าม variant (ห้ามภาษาเดียวทั้งหมด).\n"
+    "  ★ **isaan = ภาษาอีสานแท้ พูดลื่นเป็นธรรมชาติเหมือนคนอีสานคุยกันจริง ไม่แข็ง ไม่ฝืน ไม่ใช่คนภาคกลางพยายามพูดอีสาน** — "
+    "ใช้คำลงท้าย/คำเชื่อมอีสานจริง (เด้อ, สิ, กะ, อีหลี, โพด, คัก, จั่งแม่น, นัว) เช่น 'แซ่บคักอีหลี กินแล้วอยู่บ่ได้เด้อ', "
+    "'จั่งแม่นแซ่บ มื้อนี้สั่งโลด', 'ลองเบิ่งเด้อ นัวโพดเลย'. "
+    "english=โทนวัยรุ่นไวรัลสั้นๆ เช่น 'Wait—only 75 baht?!', 'Stop scrolling, trust me'.\n"
     "• image_prompt/video_prompt = อังกฤษ อาหารโคลสอัพน่ากินสุด มีไอ/ซอสยืด/แสงสวย 9:16 vertical, realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings.\n"
+    "  **video_prompt ต้องสั่งให้คลิปเปิดมาที่คนพูดทันที** (ห้ามเปิดด้วยภาพอาหารนิ่งๆ ก่อน — น่าเบื่อ). โครงสร้าง: "
+    "'Vertical 9:16. OPENS immediately on [ระบุผู้พูด] looking straight into camera, already mid-sentence with big friendly energy, saying: \"<บทพูดตรงกับ spoken_line>\". "
+    "Then quick appetizing shots of [เมนู] behind/around them.' "
+    "ระบุผู้พูดให้สมจริงตามภาษา: isaan→'a real local Northeastern-Thai (Isan) person speaking in authentic, natural, relaxed Isan/Lao-Isan accent (not stiff, not robotic, like a real local chatting)'; "
+    "thai→'a real Thai person, natural casual spoken Thai'; english→'a trendy young food vlogger, natural casual English'. "
+    "เพื่อให้ Veo สร้างคนพูด+เสียงจริง ลิปซิงค์ พูดให้จบประโยค — และ 'no on-screen text, no subtitles' (ห้ามตัวหนังสือบนจอ มีแค่เสียงพูด).\n"
     "ภาษาไทยธรรมชาติเหมือนคนรีวิวจริง."
 )
 
@@ -117,6 +134,15 @@ def _prompt(store: dict, label: str) -> str:
             "พร้อมเงื่อนไขบังคับ 'realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings'"
         )
         
+    # กระจายภาษาบทพูดให้หลากหลาย: A=ไทย/อังกฤษ/อีสาน, B=อีสาน/ไทย/อังกฤษ → ครบ 2 ภาษาต่อ 1 ภาษาใน 6 variant
+    langs = (["thai", "english", "isaan"] if label == "A" else ["isaan", "thai", "english"])
+    # สูตร HOOK ต่อ platform (คนละแบบทุกตัว กันซ้ำ) — คำแรกของ spoken_line ต้องมาจากสูตรนี้
+    hooks = (["ตัวเลข/ราคาช็อก (เช่น '10 โลแค่ 172?!')",
+              "ขัดแย้ง/เกินคาด (เช่น 'ถูกขนาดนี้มีจริงดิ')",
+              "คำสั่งห้าม (เช่น 'อย่าเพิ่งปัดผ่าน!')"] if label == "A" else
+             ["ดราม่าหิว/เตือนก่อนดู (เช่น 'เตือนแล้วนะ ดูตอนดึกทรมาน')",
+              "คำถามสะกิด (เช่น 'กล้ากินคำเดียวแล้วหยุดไหม?')",
+              "ความลับ/อินไซต์ (เช่น 'คนในรู้ว่าต้องสั่งเจ้านี้')"])
     return (
         f"เขียนคอนเทนต์ affiliate สำหรับร้านนี้ในกลุ่มตัวเลือก {label} (สำหรับ Facebook, Instagram, YouTube รวม 3 variants):\n"
         f"- ชื่อร้าน: {store['name']}\n"
@@ -129,7 +155,13 @@ def _prompt(store: dict, label: str) -> str:
         f"1. สร้างเฉพาะ variants ที่มีฟิลด์ label เป็น '{label}' เท่านั้น จำนวน 3 variants (platform ละ 1 ชิ้น)\n"
         f"2. ห้ามสร้าง label อื่นๆ ปะปนมาเด็ดขาด ทุก variant ใน list ต้องมี label: '{label}'\n"
         f"3. first_comment ใส่ {{LINK}} เสมอ\n"
-        f"4. ตอบกลับตามโครงสร้าง JSON_SKELETON ที่ระบุ"
+        f"4. ทุก variant ต้องมี spoken_line (บทพูดคนในคลิป) + spoken_lang และ 'ฝัง spoken_line ลงใน video_prompt' "
+        f"ในรูป a real person looks at camera and says: \"...\" (ตัวบทตรงกับ spoken_line เป๊ะ)\n"
+        f"5. กำหนด spoken_lang ต่อ platform ในกลุ่มนี้: facebook='{langs[0]}', instagram='{langs[1]}', youtube='{langs[2]}' "
+        f"(บทพูดต้องเป็นภาษานั้นจริง — isaan ใช้คำอีสานแท้)\n"
+        f"6. spoken_line แต่ละ platform ต้องเปิดด้วย 'สูตร hook' คนละแบบดังนี้ (คำแรกสุดต้องโดนใน 1 วิ ห้ามขึ้นต้นซ้ำกัน): "
+        f"facebook={hooks[0]} · instagram={hooks[1]} · youtube={hooks[2]}\n"
+        f"7. ตอบกลับตามโครงสร้าง JSON_SKELETON ที่ระบุ"
     )
 
 
@@ -148,8 +180,10 @@ def _mock(store: dict) -> dict:
             "cta": "แตะลิงก์คอมเมนต์แรกสั่งเลย ก่อนโปรหมด!",
             "first_comment": f"🔗 สั่ง {dish} ร้าน {store['name']} ได้เลย 👉 {{LINK}}\nส่งไว ราคาคุ้ม 🛵",
             "voiceover_script": f"บอกเลยว่าคุ้มสุดๆ! {dish}ร้าน {store['name']} {store.get('rating')} ดาว สั่งผ่าน Shopee Food คุ้มราคา แบงค์แดงมีทอน ลิงก์อยู่คอมเมนต์เลย!",
+            "spoken_lang": "thai",
+            "spoken_line": "ราคานี้ได้ไงเนี่ย คุ้มเกินไปแล้ว!",
             "image_prompt": f"appetizing close-up of {dish}, thai food, vibrant colors, price tag vibe, 9:16 vertical, food photography",
-            "video_prompt": f"cinematic food reel of {dish} steaming hot, realistic human actor, real person, photorealistic, no cartoons, slow motion, value-for-money mood, 9:16 vertical, 8 seconds",
+            "video_prompt": f"Vertical 9:16. OPENS immediately on a real Thai person looking into camera, already mid-sentence with big energy, saying: \"ราคานี้ได้ไงเนี่ย คุ้มเกินไปแล้ว!\". Then quick appetizing shots of {dish} steaming hot behind them. realistic human actor, real person, photorealistic, no cartoons, value-for-money mood, no on-screen text, no subtitles",
         })
         variants.append({
             "label": "B", "platform": p,
@@ -160,8 +194,10 @@ def _mock(store: dict) -> dict:
             "cta": "สั่งเลยก่อนหิวกว่านี้ ลิงก์คอมเมนต์แรก!",
             "first_comment": f"😋 ทนหิวไม่ไหวแล้วใช่ไหม กดสั่งเลย 👉 {{LINK}}",
             "voiceover_script": f"คำแรกก็ใจละลาย! {dish}ร้าน {store['name']} รสชาติกลมกล่อม หอมน้ำซุปเข้มข้นจนต้องร้องว้าว สั่งผ่าน Shopee Food ฟินด่วนๆ เลย!",
+            "spoken_lang": "isaan",
+            "spoken_line": "แซ่บคักอีหลี กินแล้วอยู่บ่ได้เด้อ!",
             "image_prompt": f"top-down flatlay of {dish} with side dishes, warm cozy light, mouthwatering, 9:16 vertical",
-            "video_prompt": f"fast-cut foodie ASMR reel, hands picking up {dish}, realistic human actor, real person, photorealistic, no cartoons, cheese/sauce pull close-up, 9:16 vertical",
+            "video_prompt": f"Vertical 9:16. OPENS immediately on a real local Northeastern-Thai (Isan) person looking into camera, already mid-sentence in authentic natural relaxed Isan accent (not stiff), saying: \"แซ่บคักอีหลี กินแล้วอยู่บ่ได้เด้อ!\". Then quick appetizing close-up of {dish} behind them. realistic human actor, real person, photorealistic, no cartoons, no on-screen text, no subtitles",
         })
     return {
         "store_analysis": {
@@ -219,7 +255,10 @@ _JSON_SKELETON = (
     '"video_title": "ชื่อคลิปไวรัลสไตล์อินฟลูอาหาร 30-55 ตัวอักษร มีตัวเลข+เมนู+อีโมจิ", '
     '"caption": "...", "hashtags": ["#..."], "cta": "...", '
     '"first_comment": "... {LINK} ...", "voiceover_script": "...", '
-    '"image_prompt": "english, 9:16 vertical", "video_prompt": "english, 9:16 vertical"}\n'
+    '"spoken_lang": "thai|english|isaan", '
+    '"spoken_line": "บทพูดสั้นที่คนในคลิปพูดใส่กล้อง ตรงกับ spoken_lang", '
+    '"image_prompt": "english, 9:16 vertical", '
+    '"video_prompt": "Vertical 9:16. OPENS immediately on [ผู้พูดตามภาษา] looking into camera, already mid-sentence with energy, saying: \\"<spoken_line ตรงเป๊ะ>\\". Then quick appetizing shots of the dish behind them. photorealistic, real person, no on-screen text, no subtitles"}\n'
     '  ],\n'
     '  "posting_schedule": [{"platform": "...", "time_hint": "HH:MM", "reason": "..."}]\n'
     '}'
