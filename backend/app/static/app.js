@@ -503,10 +503,37 @@ async function renderReport() {
       <table class="rep"><tr><th>ร้าน</th><th>ช่องทาง</th><th>ผู้ชนะ</th><th>ดีกว่า</th></tr>${wins}</table></div>`;
 }
 
+// ---------------- คลังวิดีโอ Google Flow
+async function renderFlowVideos() {
+  const el = $("#tab-flowvids");
+  el.innerHTML = '<p class="muted">กำลังโหลดวิดีโอ Flow...</p>';
+  const r = await api("/flow-videos").catch(() => null);
+  if (!r) { el.innerHTML = '<p class="muted">โหลดวิดีโอ Flow ไม่ได้</p>'; return; }
+  if (!r.count) {
+    el.innerHTML = '<p class="muted">ยังไม่มีวิดีโอที่สร้างจาก Google Flow — รันบอทเพื่อสร้างคลิป</p>';
+    return;
+  }
+  const cards = r.videos.map((v) => {
+    const when = v.created_at ? new Date(v.created_at).toLocaleString("th-TH")
+      : (v.mtime ? new Date(v.mtime * 1000).toLocaleString("th-TH") : "");
+    const title = v.video_title || v.filename;
+    const tag = v.platform ? ` <span class="chip posted">${v.platform}·${v.label || ""}</span>` : "";
+    return `<div class="v">
+      <video class="media" src="${getMediaUrl(v.media_url)}" muted loop playsinline controls preload="metadata"></video>
+      <div class="meta"><b>${esc(title)}</b>${tag}</div>
+      <div class="s dim">${v.store ? esc(v.store) + " · " : ""}${v.size_kb || 0} KB · ${when}</div>
+      <div style="font-size:12px"><a href="${getMediaUrl(v.media_url)}" download>⬇️ ดาวน์โหลด</a></div>
+    </div>`;
+  }).join("");
+  el.innerHTML = `<div class="s dim" style="padding:0 0 10px">คลังวิดีโอจาก Google Flow ทั้งหมด ${r.count} คลิป (เก็บในเครื่อง)</div>
+    <div class="preview">${cards}</div>`;
+}
+
 // ---------------- driver
 function render(tab) {
   ({ stores: renderStores, content: renderContent, posts: renderPosts,
-     platform: renderPlatform, report: renderReport, flow: renderFlow }[tab] || (() => {}))();
+     platform: renderPlatform, report: renderReport, flow: renderFlow,
+     flowvids: renderFlowVideos }[tab] || (() => {}))();
 }
 let liveStarted = false;
 function startLiveUpdates() {

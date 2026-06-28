@@ -6,7 +6,7 @@
 #  Dashboard -> http://127.0.0.1:8088   (Ctrl+C to stop)
 # ============================================================
 $ErrorActionPreference = "Stop"
-$proj = "C:\Users\PronHub\affiliate-autopilot"
+$proj = "C:\Users\ChaiwatA\shopee-affiliate-autopilot"
 Set-Location $proj
 
 # 1) .env (holds API keys) - create from template if missing
@@ -27,6 +27,10 @@ Write-Host "Installing/updating dependencies..." -ForegroundColor Cyan
 # 3) store data + media under the project's data folder (not Docker's /app/data)
 $env:DATA_DIR = ("$proj/data" -replace '\\', '/')
 New-Item -ItemType Directory -Force -Path "$($env:DATA_DIR)/media" | Out-Null
+
+# 3.5) ให้ server เรียก adb ได้ (phone farm) — ใช้ adb ที่มากับ adbutils
+$adbDir = "$proj\venv\Lib\site-packages\adbutils\binaries"
+if (Test-Path "$adbDir\adb.exe") { $env:PATH = "$adbDir;$env:PATH" }
 
 # 4) run backend + Dashboard
 Write-Host ""

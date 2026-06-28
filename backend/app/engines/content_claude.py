@@ -179,18 +179,32 @@ def _mock(store: dict) -> dict:
     }
 
 
+def _strip_json(text: str) -> str:
+    """ดึง JSON ออกจากข้อความ — เผื่อ Claude ห่อด้วย ```json ... ``` หรือมีคำเกริ่นนำ."""
+    t = text.strip()
+    if t.startswith("```"):
+        t = t.split("\n", 1)[-1] if "\n" in t else t
+        t = t.rsplit("```", 1)[0]
+    s, e = t.find("{"), t.rfind("}")
+    return t[s:e + 1] if s != -1 and e != -1 else t
+
+
 def _claude_generate(store: dict, label: str) -> tuple[dict, float]:
+    """เขียนคอนเทนต์ด้วย Claude — ขอ JSON ผ่าน prompt แล้ว parse (รองรับ anthropic SDK 0.45)."""
     import anthropic
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    prompt = (
+        f"{_prompt(store, label)}\n\n"
+        f"ตอบกลับเป็น JSON เท่านั้น (ไม่มีข้อความอื่น ไม่มี markdown code fence) ตามโครงนี้เป๊ะ:\n{_JSON_SKELETON}"
+    )
     resp = client.messages.create(
         model=settings.content_model,
-        max_tokens=4000,
+        max_tokens=8000,
         system=SYSTEM,
-        messages=[{"role": "user", "content": _prompt(store, label)}],
-        output_config={"format": {"type": "json_schema", "schema": CONTENT_SCHEMA}},
+        messages=[{"role": "user", "content": prompt}],
     )
     text = next((b.text for b in resp.content if b.type == "text"), "{}")
-    data = json.loads(text)
+    data = json.loads(_strip_json(text))
     u = resp.usage
     cost_usd = (u.input_tokens * 3 + u.output_tokens * 15) / 1_000_000   # sonnet 4.6
     return data, round(cost_usd * 36, 3)

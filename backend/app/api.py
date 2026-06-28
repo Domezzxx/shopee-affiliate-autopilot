@@ -457,6 +457,55 @@ def get_content(store_id: int):
         }
 
 
+# ----------------------------------------------------------------- คลังวิดีโอ Google Flow
+@router.get("/flow-videos")
+def flow_videos():
+    """คลังวิดีโอที่สร้างจาก Google Flow (เก็บในเครื่อง) — สำหรับแกลเลอรีบนหน้าเว็บ.
+    สแกนไฟล์จริงใน media_dir + ผูกข้อมูลร้าน/แพลตฟอร์ม/ชื่อคลิปจาก Variant ที่ตรงกัน."""
+    import os
+    # 1) map ชื่อไฟล์ -> ข้อมูล variant ล่าสุดที่เป็นคลิป Flow
+    meta: dict[str, dict] = {}
+    with get_session() as s:
+        stores = {st.id: st.name for st in s.exec(select(Store)).all()}
+        for v in s.exec(select(Variant).order_by(Variant.created_at.desc())).all():
+            if v.media_type != "video" or not v.media_path or not _is_flow_clip(v):
+                continue
+            bn = os.path.basename(v.media_path.replace("\\", "/"))
+            meta.setdefault(bn, {
+                "store": stores.get(v.store_id, str(v.store_id)),
+                "store_id": v.store_id,
+                "platform": v.platform,
+                "label": v.label,
+                "video_title": v.video_title,
+                "created_at": v.created_at.isoformat() if v.created_at else None,
+            })
+    # 2) สแกนไฟล์วิดีโอ Flow จริงในโฟลเดอร์ media
+    out = []
+    try:
+        names = os.listdir(settings.media_dir)
+    except FileNotFoundError:
+        names = []
+    for f in names:
+        low = f.lower()
+        if not low.endswith((".mp4", ".mov", ".webm")):
+            continue
+        if not low.startswith(("video_flow_", "i2v_", "flow_voiced_")):
+            continue
+        try:
+            stt = os.stat(os.path.join(settings.media_dir, f))
+        except OSError:
+            continue
+        out.append({
+            "filename": f,
+            "media_url": "/media/" + f,
+            "size_kb": int(stt.st_size / 1024),
+            "mtime": stt.st_mtime,
+            **meta.get(f, {}),
+        })
+    out.sort(key=lambda x: x["mtime"], reverse=True)
+    return {"count": len(out), "videos": out}
+
+
 # ----------------------------------------------------------------- รวมคลิป (montage reel)
 VOICE_MAP = {"female": "th-TH-PremwadeeNeural", "male": "th-TH-NiwatNeural"}
 

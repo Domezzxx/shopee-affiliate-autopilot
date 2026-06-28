@@ -92,6 +92,64 @@ def _click_text_trusted(page, text: str, exact: bool = True) -> bool:
         pass
     return False
 
+def _nudge_agent(page) -> bool:
+    """ขับ 'แผง Agent' ของ Flow ให้ลงมือสร้างวิดีโอ.
+
+    Flow รุ่นใหม่บางครั้งส่ง prompt เข้าโหมด Agent (ผู้ช่วยสนทนา) แทนช่อง generate ตรงๆ
+    Agent จะตอบแผน ('I'm going to generate...') แล้ว 'รอคำสั่งต่อ' โดยมีปุ่ม feedback
+    thumb_up 'Good response' / thumb_down โผล่ขึ้น (ปุ่มพวกนี้ไม่ได้สั่งสร้าง).
+    ฟังก์ชันนี้: ตรวจว่า Agent ตอบแล้ว (เจอปุ่ม Good response) → พิมพ์ยืนยันในช่อง Agent
+    (textbox ฝั่งขวา) + กดปุ่ม submit 'arrow_forward/สร้าง' ด้วย mouse จริง (trusted).
+    คืน True ถ้าได้สั่งต่อ.
+    """
+    try:
+        # Agent ตอบแล้วหรือยัง — ดูจากปุ่ม feedback 'Good response' (โผล่เฉพาะตอน Agent ตอบ)
+        responded = page.evaluate(r"""() => {
+          return [...document.querySelectorAll('button')].some(el=>{
+            const t=(el.innerText||'');
+            const r=el.getBoundingClientRect();
+            return /Good response|thumb_up/i.test(t) && r.top>=0 && r.top<window.innerHeight;
+          });
+        }""")
+        if not responded:
+            return False
+        # ช่องพิมพ์ของ Agent = textbox/contenteditable ฝั่งขวา (x>1000)
+        tb = page.evaluate(r"""() => {
+          const els=[...document.querySelectorAll("[role='textbox'],textarea,[contenteditable='true']")];
+          const c=els.map(el=>{const r=el.getBoundingClientRect();
+              return {x:r.x+r.width/2, y:r.y+r.height/2, w:r.width, h:r.height, left:r.x};})
+            .filter(o=>o.w>10&&o.h>5&&o.left>1000);
+          return c.length? c[c.length-1] : null;
+        }""")
+        if not tb:
+            return False
+        page.mouse.click(tb["x"], tb["y"])
+        time.sleep(0.2)
+        page.keyboard.insert_text("Yes, generate the video now.")
+        time.sleep(0.3)
+        # ปุ่ม submit ของ Agent: arrow_forward / 'สร้าง' / Generate ฝั่งขวา (x>1000)
+        box = page.evaluate(r"""() => {
+          const c=[...document.querySelectorAll('button')].filter(el=>{
+            const t=(el.innerText||'').trim();
+            const r=el.getBoundingClientRect();
+            return /arrow_forward|^สร้าง$|Generate|Create|Run|ส่ง|Send/i.test(t)
+                   && r.top>=0 && r.top<window.innerHeight && r.x>1000
+                   && getComputedStyle(el).cursor==='pointer';
+          }).map(el=>{const r=el.getBoundingClientRect(); return {x:r.x+r.width/2, y:r.y+r.height/2};});
+          return c.length? c[c.length-1] : null;
+        }""")
+        if box:
+            page.mouse.move(box["x"], box["y"]); time.sleep(0.15)
+            page.mouse.click(box["x"], box["y"])
+        else:
+            page.keyboard.press("Enter")
+        print("[flow-auto] ขับ Agent ให้สร้างต่อ (พิมพ์ยืนยัน + กด สร้าง)")
+        return True
+    except Exception as e:
+        print(f"[flow-auto] nudge agent error: {str(e)[:60]}")
+    return False
+
+
 def generate_video_flow(prompt: str) -> str:
     """
     Generate video short 9:16 using Google Flow web app via Playwright CDP.
@@ -264,6 +322,11 @@ def generate_video_flow(prompt: str) -> str:
                 break
             time.sleep(1.0)
 
+        # 6.5) เผื่อ prompt เข้าโหมด Agent — ขับให้สร้างต่อ (สูงสุด 2 ครั้ง ห่างกัน กันสแปม)
+        nudge_count = 0
+        if _nudge_agent(page):
+            nudge_count = 1
+
         # 7) รอวีดีโอ "ใหม่" (src ไม่ซ้ำของเดิม) — กันบั๊กหยิบวีดีโอเก่าตัวแรกมา
         print("[flow-auto] Waiting for NEW video to generate (up to ~10 นาที, คิวอาจนาน)...")
         video_url = ""
@@ -289,6 +352,11 @@ def generate_video_flow(prompt: str) -> str:
             
             # กด Approve ทุกรอบ เผื่อ dialog โผล่มากลางทาง (idempotent — ไม่มีก็ข้าม)
             _approve_credit(page)
+
+            # ขับ Agent ซ้ำอีกครั้งที่ ~40 วิ ถ้ายังไม่มีวีดีโอ (เผื่อรอบแรกพลาด) — สูงสุด 2 ครั้ง
+            if nudge_count < 2 and i == 20:
+                if _nudge_agent(page):
+                    nudge_count += 1
 
             # ตรวจจับ 'เครดิต/โควตาหมดจริง' เท่านั้น → พัก Flow + fallback
             # (ไม่ดักคำ transient ทั่วไปอย่าง 'ขออภัย/ข้อผิดพลาด' เพราะ false-positive — คิว 'high demand' = ปกติ ให้รอ)
@@ -320,25 +388,17 @@ def generate_video_flow(prompt: str) -> str:
 
         print(f"[flow-auto] ✓ วีดีโอใหม่ generate เสร็จ: {video_url}")
         
-        # 8) Download the video using browser context fetch
-        print("[flow-auto] Downloading video via browser context fetch...")
-        js_code = """
-        async (url) => {
-            const resp = await fetch(url);
-            const blob = await resp.blob();
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        }
-        """
-        base64_data_url = page.evaluate(js_code, video_url)
-        
-        # Decode base64 bytes
-        header, encoded = base64_data_url.split(",", 1)
-        video_bytes = base64.b64decode(encoded)
+        # 8) Download the video via Playwright's request context (carries the
+        #    browser's cookies, follows the tRPC redirect, and is NOT subject to
+        #    CORS — page-context fetch() fails with "Failed to fetch" because the
+        #    media URL redirects to a different storage origin).
+        print("[flow-auto] Downloading video via Playwright request context...")
+        resp = page.request.get(video_url)
+        if not resp.ok:
+            raise RuntimeError(f"ดาวน์โหลดวีดีโอไม่สำเร็จ HTTP {resp.status}")
+        video_bytes = resp.body()
+        if not video_bytes:
+            raise RuntimeError("ดาวน์โหลดวีดีโอได้ 0 bytes")
         
         # Save to the media folder
         media_dir = settings.media_dir
