@@ -23,7 +23,17 @@ def find_ffmpeg() -> str:
         return p
     base = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WinGet", "Packages")
     hits = glob.glob(os.path.join(base, "Gyan.FFmpeg*", "**", "ffmpeg.exe"), recursive=True)
-    return hits[0] if hits else ""
+    if hits:
+        return hits[0]
+    # fallback สุดท้าย: ffmpeg ที่มากับ imageio-ffmpeg (pip) — กันเครื่องที่ไม่มี ffmpeg ติดตั้ง (เช่น native Windows)
+    try:
+        import imageio_ffmpeg
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+        if exe and os.path.exists(exe):
+            return exe
+    except Exception:
+        pass
+    return ""
 
 
 def _font() -> str:
@@ -606,6 +616,62 @@ def build_review_reel(media_items: list[str], narration: str = "", voice: str | 
         return final
     shutil.move(silent, out)
     return out
+
+
+def _has_audio(ff: str, path: str) -> bool:
+    """เช็คว่าไฟล์วีดีโอมี stream เสียงไหม (ใช้ ffprobe)."""
+    fp = find_ffprobe()
+    if not fp:
+        return True   # เดาว่ามี (ปล่อยให้ลอง)
+    try:
+        out = subprocess.run([fp, "-v", "error", "-select_streams", "a",
+                              "-show_entries", "stream=index", "-of", "csv=p=0", path],
+                             capture_output=True, text=True, timeout=30)
+        return bool((out.stdout or "").strip())
+    except Exception:
+        return False
+
+
+def concat_av(clips: list[str], out: str | None = None) -> str | None:
+    """ต่อวิดีโอหลายคลิปเป็น 'คลิปรวม' โดย **คงเสียงเดิมของแต่ละคลิป** (ไม่ทับ TTS) —
+    ใช้รวมคลิป 'คนพูดหลายภาษา' (ไทย/อังกฤษ/อีสาน) ให้เป็นคลิปยาวขึ้น ลื่นไหล.
+    สเกลทุกคลิปเป็น 720x1280 9:16 + เติมเสียงเงียบให้คลิปที่ไม่มีเสียง (กัน concat พัง)."""
+    ff = find_ffmpeg()
+    clips = [c for c in (clips or []) if c and os.path.exists(c) and _is_video_file(c)]
+    if not ff or not clips:
+        return None
+    out = out or os.path.join(settings.media_dir, f"montage_{uuid.uuid4().hex[:8]}.mp4")
+    if len(clips) == 1:
+        try:
+            shutil.copy(clips[0], out); return out
+        except Exception:
+            return clips[0]
+    n = len(clips)
+    inputs: list[str] = []
+    for c in clips:
+        inputs += ["-i", c]
+    fc = []
+    for i, c in enumerate(clips):
+        fc.append(f"[{i}:v]scale=720:1280:force_original_aspect_ratio=decrease,"
+                  f"pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v{i}];")
+        if _has_audio(ff, c):
+            fc.append(f"[{i}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[a{i}];")
+        else:
+            # คลิปไม่มีเสียง → สร้างเสียงเงียบยาวเท่าคลิป (กัน stream ไม่ครบตอน concat)
+            dur = _duration(c) or float(settings.video_seconds or 6)
+            fc.append(f"anullsrc=channel_layout=stereo:sample_rate=44100,atrim=0:{dur:.2f}[a{i}];")
+    pairs = "".join(f"[v{i}][a{i}]" for i in range(n))
+    fc.append(f"{pairs}concat=n={n}:v=1:a=1[v][a]")
+    args = inputs + ["-filter_complex", "".join(fc), "-map", "[v]", "-map", "[a]",
+                     "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                     "-c:a", "aac", "-movflags", "+faststart", "-y", out]
+    if _run(ff, args) and os.path.exists(out):
+        return out
+    # fallback: ตัดตรงแบบ copy (คงเสียงถ้ามี) — เผื่อ filter พัง
+    silent = os.path.join(settings.media_dir, f"montage_hc_{uuid.uuid4().hex[:8]}.mp4")
+    if _concat_hardcut(ff, clips, silent) and os.path.exists(silent):
+        return silent
+    return None
 
 
 def extract_frame(video_path: str) -> str | None:

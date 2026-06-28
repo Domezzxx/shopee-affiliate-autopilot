@@ -122,6 +122,33 @@ def _is_video_file(p: str) -> bool:
     return bool(p) and p.lower().endswith((".mp4", ".mov", ".m4v", ".webm"))
 
 
+def _build_label_montages(variants) -> dict:
+    """ต่อคลิป 'คนพูด' ของ label เดียวกัน (FB→IG→YT = หลายภาษาเรียงกัน) เป็นคลิปรวมยาวขึ้น คงเสียงเดิม.
+    คืน {label: montage_path}. ใช้ไฟล์วีดีโอจริงเท่านั้น (ข้ามภาพนิ่ง/shopee_video)."""
+    import os
+    from ..engines import video_ffmpeg
+    order = {"facebook": 0, "instagram": 1, "youtube": 2, "shopee_video": 3}
+    out: dict[str, str] = {}
+    for lab in ("A", "B"):
+        seen: set = set()
+        clips = []
+        for v in sorted(variants, key=lambda x: order.get(x.platform, 9)):
+            if v.label != lab or v.media_type != "video":
+                continue
+            mp = v.media_path
+            if mp and os.path.exists(mp) and mp not in seen:
+                seen.add(mp); clips.append(mp)
+        if len(clips) >= 2:                         # ต่อเฉพาะเมื่อมี >=2 คลิป (ไม่งั้นใช้คลิปเดี่ยวตามเดิม)
+            try:
+                m = video_ffmpeg.concat_av(clips)
+                if m and os.path.exists(m):
+                    out[lab] = m
+                    print(f"[montage] label {lab}: รวม {len(clips)} คลิป → {os.path.basename(m)}")
+            except Exception as e:
+                print(f"[montage] label {lab} ล้มเหลว: {str(e)[:80]}")
+    return out
+
+
 def publish_job(content_job_id: int) -> dict:
     """ขั้น 4: ยิงทุก variant ออก platform (Hybrid) → วาง affiliate link คอมเมนต์แรก. อัปเดต progress ต่อ platform."""
     import os
@@ -139,13 +166,20 @@ def publish_job(content_job_id: int) -> dict:
             cand = os.path.join(settings.media_dir, os.path.basename(store0.reel_url))
             if os.path.exists(cand):
                 reel_local = cand
+        # คลิปรวม (montage): ต่อคลิปคนพูด label เดียวกัน (หลายภาษา) → คลิปยาวขึ้น คงเสียงเดิม
+        montages: dict = {}
+        if settings.post_montage:
+            _prog(sid, name, "🎬 กำลังรวมคลิป (montage)", 90)
+            montages = _build_label_montages(variants)
         n = len(variants)
         posted_media: set = set()   # กันอัปสื่อ "ตัวเดียวกัน" ซ้ำใน platform เดียว (YouTube ลบคลิปซ้ำ)
         for idx, v in enumerate(variants):
             _prog(sid, name, f"📤 โพสต์ {v.platform} {v.label}", 90 + int(idx / n * 9), detail=f"{idx + 1}/{n}")
             store = s.get(Store, v.store_id)
             media = v.media_path
-            if v.platform == "youtube" and reel_local and not _is_video_file(media):
+            if v.platform in ("youtube", "facebook", "instagram") and montages.get(v.label):
+                media = montages[v.label]     # โพสต์คลิปรวม (หลายภาษา) แทนคลิปเดี่ยว
+            elif v.platform == "youtube" and reel_local and not _is_video_file(media):
                 media = reel_local        # YouTube ต้องวีดีโอ → ใช้ reel แทนภาพ
             # ข้ามถ้าสื่อ+platform ซ้ำกับที่โพสต์ไปแล้วในรอบนี้ (กัน duplicate → โดน platform ลบ)
             mkey = (v.platform, os.path.basename(media) if media else "")

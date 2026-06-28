@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     # VIDEO_MODE: image (ภาพนิ่ง) | ffmpeg (วีดีโอฟรีจากภาพ AI) | veo (วีดีโอจริง เสียเงิน)
     video_mode: str = "image"
     video_seconds: int = 6
+    # POST_MONTAGE: true = โพสต์ 'คลิปรวม' (ต่อคลิปคนพูดหลายภาษาในร้านเดียว → ยาวขึ้น คงเสียงเดิม)
+    post_montage: bool = True
     ffmpeg_path: str = ""            # เว้นว่าง = หาให้อัตโนมัติ
     reel_scene_seconds: float = 2.0  # ความยาวต่อช็อตในคลิปรวม (สั้น = ตัดเร็วมีจังหวะ)
     reel_cta_seconds: float = 2.6    # ฉากปิด CTA
@@ -113,7 +115,10 @@ class Settings(BaseSettings):
         out = []
         for d in self.phone_farm_devices.split(","):
             d = d.strip()
-            if d and not d.startswith("#") and re.match(r"^[\w.\-]+:\d+$", d):
+            if not d or d.startswith("#"):
+                continue
+            # รับ host:port (ADB over network) หรือ USB serial (อักษร/ตัวเลขล้วน ≥6 ตัว) — กันคอมเมนต์/ค่าขยะ
+            if re.match(r"^[\w.\-]+:\d+$", d) or re.match(r"^[A-Za-z0-9]{6,}$", d):
                 out.append(d)
         return out
 

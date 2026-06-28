@@ -442,113 +442,84 @@ def post_youtube_shorts(device_ip: str, local_path: str, caption: str) -> dict:
 
 
 def post_shopee_video(device_ip: str, local_path: str, caption: str) -> dict:
-    """จำลองควบคุม Shopee โพสต์ Shopee Video"""
+    """โพสต์ Shopee Video (com.shopee.th) — จูนตาม UI จริงของแอป (Live & Video).
+
+    flow: เปิดแอป → back ปิด popup → แท็บ 'Live & Video' → ปุ่มสร้างมุมขวาบน →
+    'คลังภาพ' → แตะวิดีโอแรก → ถัดไป → ถัดไป → ใส่แคปชั่น(+ลิงก์ affiliate) → โพสต์.
+    """
     lock = get_device_lock(device_ip)
     with lock:
         d = connect_device(device_ip)
-        remote_path = sync_media(device_ip, local_path)
-        
+        # pre-grant สิทธิ์ กล้อง/ไมค์/สื่อ — กัน permission dialog เด้งกลางทาง
+        for perm in ("android.permission.CAMERA", "android.permission.RECORD_AUDIO",
+                     "android.permission.READ_MEDIA_VIDEO", "android.permission.READ_MEDIA_IMAGES",
+                     "android.permission.READ_EXTERNAL_STORAGE"):
+            run_adb(device_ip, "shell", "pm", "grant", "com.shopee.th", perm)
+        sync_media(device_ip, local_path)
+
         try:
             logger.info("[phone-farm] [Shopee] Launching App...")
             d.app_start("com.shopee.th", stop=True)
+            time.sleep(9)
+
+            # 0) ปิด popup เริ่มต้น (เช่น check-in) — มักเป็น overlay ReactTransparent → กด back
+            if "HomeActivity" not in (d.app_current().get("activity") or ""):
+                d.press("back"); time.sleep(2)
+
+            # 1) แท็บ Live & Video (ล่าง)
+            logger.info("[phone-farm] [Shopee] Open Live & Video tab...")
+            if not _click_first([d(descriptionContains="tab_bar_button_video_and_li")], timeout=6):
+                d.click(360, 1470)
+            time.sleep(6)
+
+            # 2) ปุ่มสร้าง (มุมขวาบน)
+            logger.info("[phone-farm] [Shopee] Click create...")
+            if not _click_first([d(description="click top right create icon")], timeout=6):
+                d.click(671, 113)
             time.sleep(8)
-            
-            # ปิด popup โฆษณาเริ่มต้นถ้ามี
-            popup_close_selectors = [
-                d(resourceId="com.shopee.th:id/close"),
-                d(descriptionContains="close"),
-                d(descriptionContains="ปิด"),
-                d(text="ปิด")
-            ]
-            for sel in popup_close_selectors:
-                if sel.exists(timeout=2):
-                    sel.click()
-                    time.sleep(1)
-            
-            # คลิกแท็บ Video (วิดีโอ) ด้านล่าง
-            logger.info("[phone-farm] [Shopee] Clicking Video Tab...")
-            video_tab = d(text="Video") if d(text="Video").exists() else d(text="วิดีโอ")
-            if video_tab.exists(timeout=4):
-                video_tab.click()
-            else:
-                w, h = d.window_size()
-                d.click(w // 5 * 2, h - 60)
-            time.sleep(4)
-            
-            # คลิกปุ่มกล้อง (ลงวิดีโอ/สร้างวิดีโอ) ที่มุมขวาบน
-            logger.info("[phone-farm] [Shopee] Clicking Create/Camera button...")
-            camera_btn = d(descriptionContains="camera") if d(descriptionContains="camera").exists() else d(descriptionContains="กล้อง")
-            if not camera_btn.exists():
-                camera_btn = d(resourceId="com.shopee.th:id/btn_camera")
-            if camera_btn.exists(timeout=4):
-                camera_btn.click()
-            else:
-                w, h = d.window_size()
-                d.click(w - 80, 80)
-            time.sleep(4)
-            
-            # หน้านำเข้าวิดีโอ (อัปโหลด)
-            logger.info("[phone-farm] [Shopee] Clicking Upload from Gallery...")
-            gallery_btn = d(text="อัพโหลด") if d(text="อัพโหลด").exists() else d(text="Upload")
-            if not gallery_btn.exists():
-                gallery_btn = d(resourceId="com.shopee.th:id/btn_upload")
-            if gallery_btn.exists(timeout=4):
-                gallery_btn.click()
-            else:
-                w, h = d.window_size()
-                d.click(w - 150, h - 250)
-            time.sleep(3)
-            
-            # เลือกวิดีโอล่าสุดจากแกลเลอรี
-            logger.info("[phone-farm] [Shopee] Selecting latest video...")
-            d(className="android.widget.ImageView", instance=0).click(timeout=10)
-            time.sleep(3)
-            
-            # กดเลือก/ถัดไป (Next / ตกลง)
-            next_btn = d(text="Next") if d(text="Next").exists() else d(text="ถัดไป")
-            if not next_btn.exists():
-                next_btn = d(text="ตกลง") if d(text="ตกลง").exists() else d(text="OK")
-            if next_btn.exists(timeout=4):
-                next_btn.click()
-            else:
-                w, h = d.window_size()
-                d.click(w - 80, h - 80)
-            time.sleep(4)
-            
-            # กด Next ในหน้า edit
-            next_btn = d(text="Next") if d(text="Next").exists() else d(text="ถัดไป")
-            if next_btn.exists(timeout=4):
-                next_btn.click()
-            else:
-                w, h = d.window_size()
-                d.click(w - 80, h - 80)
-            time.sleep(4)
-            
-            # หน้าพิมพ์คำบรรยาย
-            logger.info("[phone-farm] [Shopee] Entering caption...")
-            cap_box = d(descriptionContains="แคปชั่น") if d(descriptionContains="แคปชั่น").exists() else d(descriptionContains="Caption")
-            if not cap_box.exists():
-                cap_box = d(focused=True)
-            if cap_box.exists(timeout=3):
-                cap_box.click()
-                human_type(d, caption)
-            else:
-                d.click(200, 300)
-                time.sleep(1)
-                human_type(d, caption)
-                
-            # กดแชร์/โพสต์
-            logger.info("[phone-farm] [Shopee] Posting video...")
-            post_btn = d(text="Post") if d(text="Post").exists() else d(text="โพสต์")
-            if post_btn.exists(timeout=4):
-                post_btn.click()
-            else:
-                w, h = d.window_size()
-                d.click(w // 2, h - 80)
+            # เผื่อ permission dialog ยังเด้ง → กดอนุญาต
+            _click_first([d(textContains="ขณะใช้แอป"), d(textContains="อนุญาต"),
+                          d(textContains="While using")], timeout=2)
+
+            # 3) คลังภาพ (เลือกจากแกลเลอรี)
+            logger.info("[phone-farm] [Shopee] Open gallery (คลังภาพ)...")
+            if not _click_first([d(text="คลังภาพ"), d(descriptionContains="คลังภาพ")], timeout=6):
+                d.click(575, 1301)
             time.sleep(5)
-            logger.info("[phone-farm] [Shopee] Post successfully submitted!")
+
+            # 4) แตะวิดีโอแรกในกริด (เลี่ยง dropdown 'ทั้งหมด' ที่ y~200 → แตะ thumbnail y~330)
+            logger.info("[phone-farm] [Shopee] Select first video...")
+            d.click(134, 330)
+            time.sleep(3)
+
+            # 5) ถัดไป (preview → edit)
+            _click_first([d(text="ถัดไป"), d(description="ถัดไป"), d(text="Next")], timeout=6)
+            time.sleep(6)
+            # 6) ถัดไป (edit → post)
+            _click_first([d(text="ถัดไป"), d(description="ถัดไป"), d(text="Next")], timeout=6)
+            time.sleep(7)
+
+            # 7) ใส่แคปชั่น (มีลิงก์ affiliate) — Shopee EditText บล็อก IME (send_keys พัง) → ใช้ set_text
+            logger.info("[phone-farm] [Shopee] Entering caption...")
+            cap = d(className="android.widget.EditText")
+            if cap.exists(timeout=6):
+                try:
+                    cap.set_text(caption)        # set_text ทำงานกับช่องดื้อของ Shopee ได้
+                except Exception as e:
+                    logger.warning(f"[phone-farm] [Shopee] set_text fail ({str(e)[:40]}) → human_type")
+                    cap.click(); time.sleep(1); human_type(d, caption); d.press("back")
+                time.sleep(1.5)
+            else:
+                logger.warning("[phone-farm] [Shopee] caption EditText not found — ข้ามแคปชั่น")
+
+            # 8) โพสต์
+            logger.info("[phone-farm] [Shopee] Posting...")
+            if not _click_first([d(text="โพสต์"), d(description="โพสต์"), d(text="Post")], timeout=6):
+                d.click(410, 1464)   # พิกัดปุ่ม 'โพสต์' โดยประมาณ
+            time.sleep(22)   # รออัปโหลด/เผยแพร่ก่อนปิดแอป
+            logger.info("[phone-farm] [Shopee] Post submitted!")
             return {"ok": True, "error": ""}
-            
+
         except Exception as e:
             logger.error(f"[phone-farm] [Shopee] Automation failed: {e}")
             capture_debug_screenshot(d, "shopee")
