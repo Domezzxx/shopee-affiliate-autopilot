@@ -46,6 +46,7 @@ class StoreIn(BaseModel):
     image_urls: list[str] = []
     affiliate_link: str = ""
     shopee_url: str = ""
+    category: str = "food"           # food (ร้านอาหาร) | gadget (ร้านอุปกรณ์ IT/ของใช้บ้าน)
 
 
 class IngestIn(BaseModel):
@@ -59,6 +60,7 @@ def _save_store(s, st: StoreIn) -> Store:
         price_range=st.price_range, menu_json=json.dumps(st.menu, ensure_ascii=False),
         image_urls_json=json.dumps(st.image_urls, ensure_ascii=False),
         affiliate_link=st.affiliate_link, shopee_url=st.shopee_url,
+        category=(st.category or "food"),
     )
     s.add(obj)
     return obj
@@ -122,16 +124,16 @@ async def ingest_csv(file: UploadFile = File(...)):
 
 
 @router.post("/scrape")
-def scrape_now(keyword: str | None = None, limit: int | None = None):
-    """ดึงร้าน Shopee Food (ตาม SCRAPER_MODE: direct/proxy/apify) → กรอง → ingest.
+def scrape_now(keyword: str | None = None, limit: int | None = None, category: str = "food"):
+    """ดึงสินค้า Shopee (ตาม SCRAPER_MODE) → กรอง → ingest. category=food (ร้านอาหาร) | gadget (อุปกรณ์ IT/บ้าน).
     n8n เรียก endpoint เดียวนี้แทน HTTP+Code node ที่เปราะ. ไม่เคย 500 ถ้าโดนบล็อก."""
     from .services import shopee_scraper
     res = shopee_scraper.scrape(keyword, limit)
     if res.get("error"):
         return {"fetched": res.get("fetched", 0), "added": 0, "skipped": 0,
                 "mode": settings.scraper_mode, "error": res["error"]}
-    ing = ingest(IngestIn(stores=[StoreIn(**s) for s in res["stores"]]))
-    return {"fetched": res["fetched"], "mode": res.get("mode"), "error": None, **ing}
+    ing = ingest(IngestIn(stores=[StoreIn(**{**s, "category": category}) for s in res["stores"]]))
+    return {"fetched": res["fetched"], "mode": res.get("mode"), "category": category, "error": None, **ing}
 
 
 @router.get("/scrape/status")
@@ -144,11 +146,13 @@ def scrape_status():
 
 
 @router.get("/stores")
-def list_stores(status: str | None = None):
+def list_stores(status: str | None = None, category: str | None = None):
     with get_session() as s:
         q = select(Store).order_by(Store.created_at.desc())
         if status:
             q = q.where(Store.status == status)
+        if category:
+            q = q.where(Store.category == category)
         rows = s.exec(q).all()
         
         res = []
@@ -168,6 +172,7 @@ def list_stores(status: str | None = None):
             res.append({
                 "id": r.id, "name": r.name, "area": r.area, "rating": r.rating,
                 "review_count": r.review_count, "menu": jloads(r.menu_json, []),
+                "category": getattr(r, "category", "food") or "food",
                 "status": r.status, "low_ctr_days": r.low_ctr_days,
                 "affiliate_link": r.affiliate_link,
                 "requires_approval": r.requires_approval,
@@ -211,6 +216,15 @@ def run_autopilot_once():
     """รัน autopilot หนึ่งรอบทันที: ดึงร้านค้าจาก Shopee Food หากระบบไม่มีร้านสถานะ new และทำการประมวลผลทันที"""
     from .services import shopee_scraper
     if not (system_state.is_enabled() and system_state.autopilot_on()):
+        return
+    # โหมดโพสต์ซ้ำคลิปเดิม (ตอน media credit หมด) — โพสต์ซ้ำแทนการสร้างใหม่
+    if settings.repost_mode:
+        from .services import repost
+        try:
+            r = repost.repost_round()
+            print(f"[autopilot-repost] {r}")
+        except Exception as e:
+            print(f"[autopilot-repost] error: {e}")
         return
     try:
         with get_session() as s:
@@ -599,6 +613,14 @@ def abtest(store_id: int):
 @router.post("/auto-optimize")
 def run_optimize():
     return pipeline.auto_optimize()
+
+
+@router.post("/repost")
+def run_repost(background: BackgroundTasks, n: int | None = None):
+    """โพสต์ซ้ำคลิปเดิม n คลิป (ทำเบื้องหลัง เพราะมีหน่วงกันสแปม) — ใช้ตอน media credit หมด."""
+    from .services import repost
+    background.add_task(repost.repost_round, n)
+    return {"status": "started", "n": n or settings.repost_per_round}
 
 
 # ----------------------------------------------------------------- self-improvement (บอทเรียนรู้จากผลงานจริง)

@@ -119,6 +119,16 @@ def _affiliate_link_for(store: Store, sub_id: str = "") -> str:
     return _affiliate_link(store)
 
 
+def _cart_comment(first_comment: str, link: str) -> str:
+    """จัดคอมเมนต์ให้ Facebook เรนเดอร์ 'การ์ดสินค้า/ตะกร้า Shopee' อัตโนมัติ —
+    เคล็ดลับ: ลิงก์ Shopee ต้องอยู่ 'บรรทัดสุดท้าย เดี่ยวๆ' (ไม่มีตัวอักษรต่อท้าย) FB ถึงดึงเป็นการ์ด."""
+    raw = (first_comment or "").replace("{LINK}", " ")
+    hook = next((ln.strip() for ln in raw.splitlines() if ln.strip() and "http" not in ln), "")
+    hook = hook.strip(" 👉➡️:-•")
+    cta = "🛒 ตะกร้าอยู่นี่ กดสั่งเลย 👇"
+    return "\n".join([p for p in (hook, cta, link) if p])
+
+
 def _is_video_file(p: str) -> bool:
     return bool(p) and p.lower().endswith((".mp4", ".mov", ".m4v", ".webm"))
 
@@ -209,7 +219,7 @@ def publish_job(content_job_id: int) -> dict:
                 # sub_id track ต่อโพสต์ = ร้าน_แพลตฟอร์ม_variant → รู้ว่าคอมมิชชั่นมาจากคลิปไหน
                 sub_id = f"s{v.store_id}_{v.platform}_{v.label}"
                 link = _affiliate_link_for(store, sub_id)
-                text = (v.first_comment or "สั่งเลย 👉 {LINK}").replace("{LINK}", link)
+                text = _cart_comment(v.first_comment, link)   # ลิงก์บรรทัดสุดท้าย → FB เรนเดอร์การ์ด/ตะกร้า
                 c = social.publish_comment(v.platform, res["method"], res["external_id"], text)
                 p.comment_id = c["comment_id"]
                 p.comment_status = "posted" if c["ok"] else "failed"

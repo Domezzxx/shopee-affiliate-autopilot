@@ -209,6 +209,10 @@ function addFormHTML() {
       <input id="f-menu" placeholder="เมนู (คั่นด้วย , )" />
       <input id="f-link" placeholder="affiliate link" />
       <input id="f-shopee" placeholder="Shopee URL (ถ้ามี)" />
+      <select id="f-category">
+        <option value="food">🍜 ร้านอาหาร</option>
+        <option value="gadget">🛒 ร้านอุปกรณ์ (IT/ของใช้บ้าน)</option>
+      </select>
     </div>
     <div class="row" style="margin-top:10px">
       <span class="muted">เพิ่มเองไม่ติดเกณฑ์กรอง · หรืออัปโหลด CSV ด้านขวา</span>
@@ -220,11 +224,26 @@ function addFormHTML() {
   </div>`;
 }
 
+let storeCatFilter = "";   // "" = ทั้งหมด | food | gadget
+const CAT_LABEL = { food: "🍜 ร้านอาหาร", gadget: "🛒 ร้านอุปกรณ์" };
+const CAT_COLOR = { food: "#e67e22", gadget: "#2980b9" };
+function setStoreCat(c) { storeCatFilter = c; renderStores(); }
+
 async function renderStores() {
-  const s = await api("/stores");
-  $("#tab-stores").innerHTML = addFormHTML() + `<div class="grid">${s.map((x) => `
+  const all = await api("/stores");
+  const catOf = (x) => x.category || "food";
+  const cnt = { all: all.length, food: all.filter((x) => catOf(x) === "food").length,
+                gadget: all.filter((x) => catOf(x) === "gadget").length };
+  const s = storeCatFilter ? all.filter((x) => catOf(x) === storeCatFilter) : all;
+  const btn = (c, label) => `<button onclick="setStoreCat('${c}')" style="padding:6px 14px;border-radius:20px;cursor:pointer;border:1px solid var(--line);${storeCatFilter === c ? "background:#3a4150;color:#fff;font-weight:600" : "background:#2a2f3a;color:var(--txt)"}">${label}</button>`;
+  const bar = `<div style="display:flex;gap:8px;margin:4px 0 14px;flex-wrap:wrap">
+    ${btn("", "ทั้งหมด (" + cnt.all + ")")}
+    ${btn("food", "🍜 ร้านอาหาร (" + cnt.food + ")")}
+    ${btn("gadget", "🛒 ร้านอุปกรณ์ (" + cnt.gadget + ")")}
+  </div>`;
+  $("#tab-stores").innerHTML = addFormHTML() + bar + `<div class="grid">${s.map((x) => `
     <div class="card">
-      <h4>${esc(x.name)}</h4>
+      <h4><span style="display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;color:#fff;background:${CAT_COLOR[catOf(x)] || "#777"};margin-right:6px;vertical-align:middle">${CAT_LABEL[catOf(x)] || catOf(x)}</span>${esc(x.name)}</h4>
       <div class="meta">${esc(x.area) || "—"} · ⭐${x.rating} (${x.review_count} รีวิว)</div>
       <div class="meta">เมนู: ${esc((x.menu || []).slice(0, 3).join(", ")) || "—"}</div>
       <div class="meta">${x.affiliate_link ? "🔗 มีลิงก์" : '<span class="bad">⚠ ยังไม่มีลิงก์</span>'}</div>
@@ -259,6 +278,7 @@ async function submitAddStore() {
     menu: $("#f-menu").value.split(",").map((x) => x.trim()).filter(Boolean),
     affiliate_link: $("#f-link").value.trim(),
     shopee_url: $("#f-shopee").value.trim(),
+    category: ($("#f-category") && $("#f-category").value) || "food",
   };
   if (!body.name) return toast("ใส่ชื่อร้านก่อน", true);
   try {
@@ -529,11 +549,52 @@ async function renderFlowVideos() {
     <div class="preview">${cards}</div>`;
 }
 
+// ---------------- 🧠 การเรียนรู้ (self-improvement insights)
+async function renderInsights() {
+  const el = $("#tab-insights");
+  el.innerHTML = '<p class="muted">กำลังโหลดสมองของบอท...</p>';
+  const d = await api("/insights").catch(() => null);
+  if (!d) { el.innerHTML = '<p class="muted">โหลด insights ไม่ได้</p>'; return; }
+  const mode = d.metric_mode === "eng_rate" ? "Engagement-rate" : "CTR";
+  const rkey = d.metric_mode === "eng_rate" ? "eng_rate" : "ctr";
+  const updated = d.updated_at ? new Date(d.updated_at).toLocaleString("th-TH") : "—";
+  if (!d.ready) {
+    el.innerHTML = `<div class="card"><h4>🧠 บอทยังเก็บข้อมูลอยู่</h4>
+      <p class="muted">ยังมีผลไม่พอจะสรุป (ต้องสะสม impression ให้มากพอต่อกลุ่ม)<br>
+      impressions สะสม: <b>${(d.total_impressions || 0).toLocaleString()}</b> · อัปเดตล่าสุด: ${updated}</p>
+      <p class="muted">พอวิวสะสมมากขึ้น บอทจะเริ่มสรุปว่า ภาษา/รูปแบบ/แพลตฟอร์มไหนปังที่สุด แล้วเอาไปปรับการเขียนเอง</p></div>`;
+    return;
+  }
+  const NAME = { food: "🍜", thai: "🇹🇭 ไทย", english: "🇬🇧 อังกฤษ", isaan: "🪕 อีสาน", unknown: "ไม่ระบุ" };
+  const rows = (obj) => Object.entries(obj || {}).map(([k, v], i) =>
+    `<tr><td>${i === 0 ? "🏆 " : ""}${NAME[k] || k}</td><td><b>${(v[rkey] * 100).toFixed(2)}%</b></td>
+     <td class="muted">${v.impressions.toLocaleString()} imp · ${v.engagement} eng</td></tr>`).join("") ||
+    '<tr><td colspan="3" class="muted">ข้อมูลยังไม่พอ (ต้อง ≥2 กลุ่ม)</td></tr>';
+  const tbl = (title, obj) => `<div class="card"><h4>${title}</h4>
+    <table class="rep" style="width:100%"><tr><th>กลุ่ม</th><th>${mode}</th><th></th></tr>${rows(obj)}</table></div>`;
+  const hooks = (d.top_hooks || []).filter(h => h.hook).slice(0, 6).map(h =>
+    `<li>${(h.rate * 100).toFixed(2)}% <span class="muted">[${h.platform}/${h.label}]</span> "${esc(h.hook)}"</li>`).join("");
+  el.innerHTML = `
+    <div class="kpis" style="padding:0 0 14px">
+      <div class="kpi"><div class="v ok">${(d.baseline_eng_rate * 100).toFixed(2)}%</div><div class="l">Engagement-rate ฐาน</div></div>
+      <div class="kpi"><div class="v">${(d.total_impressions || 0).toLocaleString()}</div><div class="l">Impressions สะสม</div></div>
+      <div class="kpi"><div class="v">${mode}</div><div class="l">วัดผลด้วย</div></div>
+    </div>
+    <div class="s dim" style="padding:0 0 10px">บอทใช้ข้อมูลนี้ปรับการเขียนคอนเทนต์อัตโนมัติ · อัปเดตล่าสุด ${updated}</div>
+    <div class="grid">
+      ${tbl("🗣️ ภาษาบทพูดที่ปัง", d.by_spoken_lang)}
+      ${tbl("🅰️🅱️ รูปแบบ A vs B", d.by_label)}
+      ${tbl("📱 แพลตฟอร์ม", d.by_platform)}
+    </div>
+    <div class="card"><h4>🔥 Hook ที่พิสูจน์แล้วว่าปัง</h4>
+      <ul style="margin:0;padding-left:18px;line-height:1.8">${hooks || '<li class="muted">ยังไม่มี</li>'}</ul></div>`;
+}
+
 // ---------------- driver
 function render(tab) {
   ({ stores: renderStores, content: renderContent, posts: renderPosts,
      platform: renderPlatform, report: renderReport, flow: renderFlow,
-     flowvids: renderFlowVideos }[tab] || (() => {}))();
+     flowvids: renderFlowVideos, insights: renderInsights }[tab] || (() => {}))();
 }
 let liveStarted = false;
 function startLiveUpdates() {

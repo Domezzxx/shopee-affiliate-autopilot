@@ -94,6 +94,12 @@ class Settings(BaseSettings):
     autopilot_interval_min: int = 120     # รอบ auto-pilot (นาที)
     autopilot_batch: int = 2              # จำนวนร้านต่อรอบ (กัน rate limit + เครดิต)
 
+    # Repost mode — โพสต์ซ้ำคลิปเดิม (ตอน media credit หมด: Flow/Gemini รูป) แทนการสร้างใหม่
+    repost_mode: bool = False             # true = autopilot โพสต์ซ้ำคลิปเก่าแทนสร้างใหม่
+    repost_per_round: int = 3             # จำนวนคลิปซ้ำต่อรอบ
+    repost_gap_min: float = 8.0           # หน่วงระหว่างโพสต์ในรอบ (นาที) กันโดนแบนสแปม
+    repost_gap_max: float = 20.0
+
     # Flow quota guard — เมื่อเครดิต Flow หมด พักไม่ยิงซ้ำ (กันเสียเวลา/เครดิต)
     flow_block_hours: int = 6             # บล็อก Flow กี่ชม.หลังเจอเครดิตหมด
 
