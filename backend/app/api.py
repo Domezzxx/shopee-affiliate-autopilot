@@ -217,6 +217,14 @@ def run_autopilot_once():
     from .services import shopee_scraper
     if not (system_state.is_enabled() and system_state.autopilot_on()):
         return
+    # โหมดสร้าง+โพสต์ภาพโปรโมทนิ่ง (ฟรี ไม่ใช้ Flow credit)
+    if settings.promo_mode:
+        from .services import repost
+        try:
+            print(f"[autopilot-promo] {repost.promo_round()}")
+        except Exception as e:
+            print(f"[autopilot-promo] error: {e}")
+        return
     # โหมดโพสต์ซ้ำคลิปเดิม (ตอน media credit หมด) — โพสต์ซ้ำแทนการสร้างใหม่
     if settings.repost_mode:
         from .services import repost
@@ -621,6 +629,49 @@ def run_repost(background: BackgroundTasks, n: int | None = None):
     from .services import repost
     background.add_task(repost.repost_round, n)
     return {"status": "started", "n": n or settings.repost_per_round}
+
+
+@router.post("/promo")
+def run_promo(background: BackgroundTasks, n: int | None = None):
+    """สร้างภาพโปรโมทนิ่ง + โพสต์ FB/IG อัตโนมัติ n ร้าน (ฟรี ไม่ใช้ Flow credit)."""
+    from .services import repost
+    background.add_task(repost.promo_round, n)
+    return {"status": "started", "n": n or settings.repost_per_round}
+
+
+@router.post("/promo/generate-all")
+def promo_generate_all(background: BackgroundTasks, category: str | None = None, limit: int | None = None):
+    """สร้างภาพโปรโมทให้ทุกร้าน (เบื้องหลัง — ดูผลที่แท็บภาพโปรโมท). ไม่โพสต์ แค่สร้างไว้ดาวน์โหลด."""
+    from .engines import promo_image
+    background.add_task(promo_image.make_promo_all, category, limit)
+    return {"status": "started", "category": category or "all"}
+
+
+@router.get("/promo/list")
+def promo_list():
+    """รายการภาพโปรโมทที่สร้างไว้ (สำหรับแท็บบนเว็บ — ดู + ดาวน์โหลด)."""
+    import os
+    names = {st.id: st.name for st in get_session().exec(select(Store)).all()}
+    out = []
+    try:
+        files = os.listdir(settings.media_dir)
+    except FileNotFoundError:
+        files = []
+    for f in files:
+        if not (f.startswith("promo_") and f.lower().endswith(".png")):
+            continue
+        try:
+            sid = int(f.split("_")[1])
+        except (IndexError, ValueError):
+            sid = 0
+        try:
+            stt = os.stat(os.path.join(settings.media_dir, f))
+        except OSError:
+            continue
+        out.append({"filename": f, "media_url": "/media/" + f, "store_id": sid,
+                    "store": names.get(sid, ""), "size_kb": int(stt.st_size / 1024), "mtime": stt.st_mtime})
+    out.sort(key=lambda x: x["mtime"], reverse=True)
+    return {"count": len(out), "promos": out}
 
 
 # ----------------------------------------------------------------- self-improvement (บอทเรียนรู้จากผลงานจริง)

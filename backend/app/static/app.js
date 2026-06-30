@@ -590,11 +590,40 @@ async function renderInsights() {
       <ul style="margin:0;padding-left:18px;line-height:1.8">${hooks || '<li class="muted">ยังไม่มี</li>'}</ul></div>`;
 }
 
+// ---------------- 🖼️ ภาพโปรโมท (สร้าง + ดาวน์โหลด)
+async function genAllPromo() {
+  if (!confirm("สร้างภาพโปรโมททุกร้าน? (ใช้เวลาสักครู่ — ทำเบื้องหลัง)")) return;
+  try {
+    await api("/promo/generate-all", { method: "POST" });
+    toast("เริ่มสร้างภาพทุกร้านแล้ว — รอสักครู่แล้วกดรีเฟรช");
+  } catch (e) { toast(e.message, true); }
+}
+async function renderPromo() {
+  const el = $("#tab-promo");
+  const bar = `<div style="display:flex;gap:8px;margin:4px 0 14px;flex-wrap:wrap;align-items:center">
+    <button class="primary" onclick="genAllPromo()">🖼️ สร้างภาพทุกร้าน</button>
+    <button class="go" onclick="renderPromo()">🔄 รีเฟรช</button>
+    <span class="muted" id="promo-count"></span></div>`;
+  el.innerHTML = bar + '<p class="muted">กำลังโหลด...</p>';
+  const r = await api("/promo/list").catch(() => null);
+  if (!r) { el.innerHTML = bar + '<p class="muted">โหลดไม่ได้</p>'; return; }
+  $("#promo-count") && ($("#promo-count").textContent = `ทั้งหมด ${r.count} ภาพ`);
+  const cards = (r.promos || []).map((p) => `<div class="v">
+    <img class="media" src="${getMediaUrl(p.media_url)}" loading="lazy" />
+    <div class="meta"><b>${esc(p.store || ("ร้าน #" + p.store_id))}</b></div>
+    <div class="s dim">${p.size_kb || 0} KB</div>
+    <div style="font-size:12px"><a href="${getMediaUrl(p.media_url)}" download>⬇️ ดาวน์โหลด</a></div>
+  </div>`).join("");
+  el.innerHTML = bar + (r.count
+    ? `<div class="preview">${cards}</div>`
+    : '<p class="muted">ยังไม่มีภาพ — กด "สร้างภาพทุกร้าน"</p>');
+}
+
 // ---------------- driver
 function render(tab) {
   ({ stores: renderStores, content: renderContent, posts: renderPosts,
      platform: renderPlatform, report: renderReport, flow: renderFlow,
-     flowvids: renderFlowVideos, insights: renderInsights }[tab] || (() => {}))();
+     flowvids: renderFlowVideos, insights: renderInsights, promo: renderPromo }[tab] || (() => {}))();
 }
 let liveStarted = false;
 function startLiveUpdates() {

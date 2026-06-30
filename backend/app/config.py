@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     autopilot_interval_min: int = 120     # รอบ auto-pilot (นาที)
     autopilot_batch: int = 2              # จำนวนร้านต่อรอบ (กัน rate limit + เครดิต)
 
+    # Promo image mode — สร้างภาพโปรโมทนิ่ง (ฟรี ไม่ใช้ Flow) แล้วโพสต์ FB/IG อัตโนมัติ
+    promo_mode: bool = False              # true = autopilot สร้าง+โพสต์ภาพโปรโมทแทนสร้างคลิป
+
     # Repost mode — โพสต์ซ้ำคลิปเดิม (ตอน media credit หมด: Flow/Gemini รูป) แทนการสร้างใหม่
     repost_mode: bool = False             # true = autopilot โพสต์ซ้ำคลิปเก่าแทนสร้างใหม่
     repost_per_round: int = 3             # จำนวนคลิปซ้ำต่อรอบ

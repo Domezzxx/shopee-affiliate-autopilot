@@ -39,6 +39,56 @@ def _save(st: dict) -> None:
         print(f"[repost] save state fail: {e}")
 
 
+def promo_round(n: int | None = None, platforms=("facebook", "instagram")) -> dict:
+    """สร้าง 'ภาพโปรโมทนิ่ง' (ฟรี ไม่ใช้ Flow credit) แล้วโพสต์ FB/IG + คอมเมนต์ตะกร้า + หน่วงกันสแปม.
+    เลือกร้านที่โปรโมทนานสุดก่อน · ภาพดึงจากเฟรมคลิปที่มีอยู่."""
+    from . import pipeline
+    from ..engines import promo_image
+    n = n or settings.repost_per_round
+    state = _load()
+    done = []
+    with get_session() as s:
+        stores = (s.exec(select(Store).where(Store.category == "food")).all()
+                  or s.exec(select(Store)).all())
+        stores.sort(key=lambda st: min(state.get(f"promo:{st.id}:{p}", 0) for p in platforms))
+        picked = 0
+        for st in stores:
+            if picked >= n:
+                break
+            v = s.exec(select(Variant).where(Variant.store_id == st.id)).first()
+            if not v:
+                continue
+            photo = promo_image.get_promo_photo(st.id)
+            if not photo:
+                continue
+            img = promo_image.make_promo(st, photo, v.hook)
+            if not img:
+                continue
+            plat = platforms[picked % len(platforms)]
+            cap = v.caption or st.name
+            res = social.publish(plat, cap, img)         # โพสต์ภาพนิ่ง
+            p = Post(variant_id=v.id, store_id=st.id, platform=plat,
+                     method=res["method"], account=res["account"], external_id=res["external_id"],
+                     status="posted" if res["ok"] else "failed", error=res["error"],
+                     posted_at=datetime.utcnow() if res["ok"] else None)
+            if res["ok"]:
+                sub_id = f"s{st.id}_{plat}_{v.label}_promo"
+                link = pipeline._affiliate_link_for(st, sub_id)
+                text = pipeline._cart_comment(v.first_comment, link)
+                c = social.publish_comment(plat, res["method"], res["external_id"], text)
+                p.comment_id = c["comment_id"]
+                p.comment_status = "posted" if c["ok"] else "failed"
+                state[f"promo:{st.id}:{plat}"] = time.time()
+            s.add(p); s.commit()
+            done.append({"store": st.name[:24], "platform": plat, "ok": res["ok"]})
+            print(f"[promo] {plat} {st.name[:20]} -> ok={res['ok']}")
+            picked += 1
+            if picked < n:
+                time.sleep(random.uniform(settings.repost_gap_min, settings.repost_gap_max) * 60)
+    _save(state)
+    return {"promo_posted": sum(1 for d in done if d["ok"]), "detail": done}
+
+
 def repost_round(n: int | None = None, platforms=("facebook", "instagram")) -> dict:
     """รีโพสต์ n คลิปเดิม (เก่าสุดก่อน) ไป platform หมุนเวียน + คอมเมนต์ลิงก์ + หน่วงกันสแปม."""
     from . import pipeline   # ใช้ _cart_comment + _affiliate_link_for (import ในฟังก์ชันกัน circular)
