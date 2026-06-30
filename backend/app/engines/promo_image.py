@@ -137,7 +137,12 @@ def make_promo(store, photo_path: str, hook: str = "") -> str | None:
     M = 60
 
     # แบรนด์บนซ้าย
-    bt = "ของกินเด็ด · อุดรธานี" if (getattr(store, "category", "food") == "food") else "ของดีบอกต่อ · อุดรธานี"
+    area_text = getattr(store, "area", "") or "อุดรธานี"
+    if getattr(store, "category", "food") == "food":
+        subtype = getattr(store, "food_subtype", "") or "ของกินเด็ด"
+        bt = f"{subtype} · {area_text}"
+    else:
+        bt = f"ของดีบอกต่อ · {area_text}"
     bf = F(34); bw = d.textlength(bt, font=bf)
     d.rounded_rectangle([M, 55, M + bw + 36, 55 + bf.size + 18], radius=26, fill=ORANGE)
     d.text((M + 18, 62), bt, font=bf, fill=(255, 255, 255))

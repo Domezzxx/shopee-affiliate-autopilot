@@ -209,9 +209,16 @@ function addFormHTML() {
       <input id="f-menu" placeholder="เมนู (คั่นด้วย , )" />
       <input id="f-link" placeholder="affiliate link" />
       <input id="f-shopee" placeholder="Shopee URL (ถ้ามี)" />
-      <select id="f-category">
+      <select id="f-category" onchange="toggleFormFoodSubtype(this.value)">
         <option value="food">🍜 ร้านอาหาร</option>
         <option value="gadget">🛒 ร้านอุปกรณ์ (IT/ของใช้บ้าน)</option>
+      </select>
+      <select id="f-food-subtype">
+        <option value="">🍔 ประเภทร้านย่อย (ไม่ระบุ)</option>
+        <option value="ร้านตามสั่ง">🍳 ร้านตามสั่ง</option>
+        <option value="ร้านก๋วยเตี๋ยว">🍜 ร้านก๋วยเตี๋ยว</option>
+        <option value="ของหวาน/เครื่องดื่ม">🍨 ของหวาน/เครื่องดื่ม</option>
+        <option value="ชาบู/หมูกระทะ">🥩 ชาบู/หมูกระทะ</option>
       </select>
     </div>
     <div class="row" style="margin-top:10px">
@@ -243,10 +250,32 @@ async function renderStores() {
   </div>`;
   $("#tab-stores").innerHTML = addFormHTML() + bar + `<div class="grid">${s.map((x) => `
     <div class="card">
-      <h4><span style="display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;color:#fff;background:${CAT_COLOR[catOf(x)] || "#777"};margin-right:6px;vertical-align:middle">${CAT_LABEL[catOf(x)] || catOf(x)}</span>${esc(x.name)}</h4>
+      <h4>
+        <span style="display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;color:#fff;background:${CAT_COLOR[catOf(x)] || "#777"};margin-right:6px;vertical-align:middle">${CAT_LABEL[catOf(x)] || catOf(x)}</span>
+        ${x.food_subtype ? `<span style="display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;color:#fff;background:#16a085;margin-right:6px;vertical-align:middle">${esc(x.food_subtype)}</span>` : ""}
+        ${esc(x.name)}
+      </h4>
       <div class="meta">${esc(x.area) || "—"} · ⭐${x.rating} (${x.review_count} รีวิว)</div>
       <div class="meta">เมนู: ${esc((x.menu || []).slice(0, 3).join(", ")) || "—"}</div>
       <div class="meta">${x.affiliate_link ? "🔗 มีลิงก์" : '<span class="bad">⚠ ยังไม่มีลิงก์</span>'}</div>
+      
+      <div class="meta" style="margin-top:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap">
+        <span class="dim" style="font-size:11px">ตั้งค่าประเภทร้าน:</span>
+        <select onchange="updateStoreCatSub(${x.id}, this.value, '${x.food_subtype || ""}')" style="font-size:11px; padding:2px 4px; border-radius:4px; border:1px solid var(--line); background:#1e222b; color:#fff">
+          <option value="food" ${catOf(x) === "food" ? "selected" : ""}>🍜 ร้านอาหาร</option>
+          <option value="gadget" ${catOf(x) === "gadget" ? "selected" : ""}>🛒 ร้านอุปกรณ์</option>
+        </select>
+        ${catOf(x) === "food" ? `
+        <select onchange="updateStoreCatSub(${x.id}, 'food', this.value)" style="font-size:11px; padding:2px 4px; border-radius:4px; border:1px solid var(--line); background:#1e222b; color:#fff">
+          <option value="" ${!x.food_subtype ? "selected" : ""}>🍔 ทั่วไป</option>
+          <option value="ร้านตามสั่ง" ${x.food_subtype === "ร้านตามสั่ง" ? "selected" : ""}>🍳 ร้านตามสั่ง</option>
+          <option value="ร้านก๋วยเตี๋ยว" ${x.food_subtype === "ร้านก๋วยเตี๋ยว" ? "selected" : ""}>🍜 ร้านก๋วยเตี๋ยว</option>
+          <option value="ของหวาน/เครื่องดื่ม" ${x.food_subtype === "ของหวาน/เครื่องดื่ม" ? "selected" : ""}>🍨 ของหวาน/เครื่องดื่ม</option>
+          <option value="ชาบู/หมูกระทะ" ${x.food_subtype === "ชาบู/หมูกระทะ" ? "selected" : ""}>🥩 ชาบู/หมูกระทะ</option>
+        </select>
+        ` : ""}
+      </div>
+
       <div class="meta" style="margin-top:6px; font-weight:600">
         <span>ทุน: ฿${x.cost}</span> · 
         <span class="${x.profit >= 0 ? 'ok' : 'bad'}">กำไร: ฿${x.profit}</span>
@@ -279,6 +308,7 @@ async function submitAddStore() {
     affiliate_link: $("#f-link").value.trim(),
     shopee_url: $("#f-shopee").value.trim(),
     category: ($("#f-category") && $("#f-category").value) || "food",
+    food_subtype: ($("#f-food-subtype") && $("#f-food-subtype").value) || "",
   };
   if (!body.name) return toast("ใส่ชื่อร้านก่อน", true);
   try {
@@ -302,6 +332,21 @@ async function submitCsv(ev) {
 window.runStore = async (id) => {
   await api(`/stores/${id}/run`, { method: "POST" });
   toast("เริ่มรันร้านนี้ — ดูความคืบหน้าด้านบน"); startProgress();
+};
+window.updateStoreCatSub = async (id, category, food_subtype) => {
+  try {
+    await api(`/stores/${id}/update-category`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, food_subtype })
+    });
+    toast("อัปเดตประเภทหมวดหมู่เรียบร้อยแล้ว");
+    renderStores();
+  } catch (e) { toast(e.message, true); }
+};
+window.toggleFormFoodSubtype = (cat) => {
+  const el = document.getElementById("f-food-subtype");
+  if (el) el.style.display = cat === "food" ? "block" : "none";
 };
 window.makeReel = async (id, label = "A") => {
   const voice = document.getElementById(`voice-sel-${id}`)?.value || "female";

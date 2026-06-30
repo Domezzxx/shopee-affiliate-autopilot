@@ -52,6 +52,8 @@ def generate_for_store(store_id: int) -> dict:
             "name": store.name, "area": store.area, "rating": store.rating,
             "review_count": store.review_count, "price_range": store.price_range,
             "menu": jloads(store.menu_json, []), "affiliate_link": store.affiliate_link,
+            "category": getattr(store, "category", "food") or "food",
+            "food_subtype": getattr(store, "food_subtype", "") or "",
         }
         data, cost = content_claude.generate_content(store_dict)
 

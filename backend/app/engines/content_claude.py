@@ -153,13 +153,27 @@ def _prompt(store: dict, label: str) -> str:
              ["ดราม่าหิว/เตือนก่อนดู (เช่น 'เตือนแล้วนะ ดูตอนดึกทรมาน')",
               "คำถามสะกิด (เช่น 'กล้ากินคำเดียวแล้วหยุดไหม?')",
               "ความลับ/อินไซต์ (เช่น 'คนในรู้ว่าต้องสั่งเจ้านี้')"])
+    subtype = store.get("food_subtype", "")
+    category = store.get("category", "food")
+    subtype_guidance = ""
+    if category == "food" and subtype:
+        subtype_guidance = (
+            f"คำแนะนำเพิ่มเติมสำหรับประเภทร้านย่อย '{subtype}':\n"
+            f"- หากเป็น 'ร้านก๋วยเตี๋ยว': ปรับโทนคอนเทนต์ แคปชั่น และสคริปต์สั้น ให้เน้นบรรยากาศควันฉุย ซดน้ำซุปร้อนๆ รสชาติกลมกล่อม ความเหนียวนุ่มของเส้น ลูกชิ้นทำเองรสเด็ด หรือเนื้อเปื่อยชิ้นโต\n"
+            f"- หากเป็น 'ร้านตามสั่ง': เน้นสไตล์ผัดกระทะไฟลุก (wok hei) ความรวดเร็วทันใจ เมนูหลากหลายที่มีให้เลือกชิม รสชาติจัดจ้านถึงเครื่อง กลิ่นหอมฟุ้งติดจมูก\n"
+            f"- หากเป็น 'ของหวาน/เครื่องดื่ม': เน้นความละมุน หวานสดชื่น ดับร้อน หน้าตาสวยงามดูดี ถ่ายรูปสวย ชวนให้ไปถ่ายรูปเช็คอิน\n"
+            f"- หากเป็นประเภทอื่น ๆ: ให้เน้นบรรยายความอร่อยเฉพาะตัวของเมนูนั้นๆ เป็นหลัก\n\n"
+        )
+
     return (
         f"เขียนคอนเทนต์ affiliate สำหรับร้านนี้ในกลุ่มตัวเลือก {label} (สำหรับ Facebook, Instagram, YouTube รวม 3 variants):\n"
         f"- ชื่อร้าน: {store['name']}\n"
         f"- ย่าน: {store.get('area','')}\n"
         f"- เรตติ้ง: {store.get('rating')} ({store.get('review_count')} รีวิว)\n"
         f"- เมนูเด่น: {', '.join(store.get('menu', [])[:6])}\n"
-        f"- ช่วงราคา: {store.get('price_range','')}\n\n"
+        f"- ช่วงราคา: {store.get('price_range','')}\n"
+        f"- ประเภทร้านย่อย: {subtype or 'ทั่วไป'}\n\n"
+        f"{subtype_guidance}"
         f"{style_desc}\n\n"
         f"ข้อบังคับสำคัญ:\n"
         f"1. สร้างเฉพาะ variants ที่มีฟิลด์ label เป็น '{label}' เท่านั้น จำนวน 3 variants (platform ละ 1 ชิ้น)\n"
@@ -181,34 +195,84 @@ def _mock(store: dict) -> dict:
     dish = menu[0]
     area = store.get("area", "อุดร")
     variants = []
+    subtype = store.get("food_subtype", "")
+    if subtype == "ร้านก๋วยเตี๋ยว":
+        hook_a = f"ซดน้ำซุปร้อนๆ ฟินๆ! {dish}ร้านนี้ {store.get('rating')}⭐ ราคาดีงามมาก! 🍜"
+        title_a = f"ก๋วยเตี๋ยวซดน้ำซุปฟิน! {dish}ย่าน{area} ⭐ ต้องลอง 🔥"
+        caption_a = f"🍜 ใครสายเส้นห้ามพลาด! {store['name']} เจ้าเด็ดย่าน{area}\nน้ำซุปเข้มข้น เส้นเหนียวนุ่มสุดๆ\nรีบกดสั่งมาซดร้อนๆ ที่บ้านเลย 👇"
+        voice_a = f"ก๋วยเตี๋ยวฟินๆ ต้องร้านนี้เลย! {dish}ร้าน {store['name']} น้ำซุปหอมกลมกล่อม เส้นเหนียวนุ่ม แบงค์แดงมีทอน กดสั่ง Shopee Food ด่วน!"
+        spoken_a = "ซดซุปร้อนๆ เส้นนุ่มฟินมาก!"
+
+        hook_b = f"เตือนแล้วนะ… {dish}ร้านนี้ระวังซดหมดถ้วยไม่รู้ตัว! 😋"
+        title_b = f"ซดเกลี้ยงชาม! {dish}เจ้าเด็ดย่าน{area} 😋"
+        caption_b = f"สายก๋วยเตี๋ยวต้องซูด! 🚨\n{dish} {store['name']} น้ำซุปกลมกล่อม เส้นนุ่มเครื่องแน่น\nสั่ง Shopee Food ส่งไวทันใจ 🛵"
+        voice_b = f"คำแรกก็วางชามไม่ลง! {dish}ร้าน {store['name']} น้ำซุปเข้มข้นเคี่ยวนาน ลูกชิ้นเด้งดึ๋ง สั่งมาฟินที่บ้านได้เลยผ่าน Shopee Food!"
+        spoken_b = "แซ่บคักอีหลี ซดหมดชามเลยเด้อ!"
+    elif subtype == "ร้านตามสั่ง":
+        hook_a = f"ผัดไฟลุก กระทะหอมๆ! {dish}ร้านนี้ {store.get('rating')}⭐ อิ่มจุกราคาประหยัด! 🍳"
+        title_a = f"ตามสั่งจานยักษ์! {dish}ย่าน{area} ⭐ คุ้มมาก 🔥"
+        caption_a = f"🍳 อิ่มอร่อยตามใจสั่ง! {store['name']} ผัดร้อนๆ กลิ่นหอมกระทะย่าน{area}\nเมนูหลากหลาย ปริมาณจัดเต็ม\nกดสั่งในคอมเมนต์แรกเลย 👇"
+        voice_a = f"ตามสั่งจานยักษ์อิ่มจุก! ร้าน {store['name']} กับเมนู {dish} ผัดไฟลุกหอมกระทะสุดๆ ราคาดีงาม แบงค์แดงมีทอน สั่งเลย!"
+        spoken_a = "กระทะร้อนหอมฟุ้ง อิ่มคุ้มจัด!"
+
+        hook_b = f"เตือนแล้วนะ… {dish}ตามสั่งร้านนี้ระวังจานเดียวไม่พอ! 😋"
+        title_b = f"หอมกระทะไฟลุก! {dish}ตามสั่งเจ้าเด็ดย่าน{area} 😋"
+        caption_b = f"สายกินตามสั่งห้ามพลาด! 🚨\n{dish} {store['name']} รสชาติเข้มข้นถึงใจ หอมกลิ่นไหม้กระทะอ่อนๆ\nกดสั่ง Shopee Food เลย 🛵"
+        voice_b = f"กลิ่นหอมกระทะยั่วๆ มาแล้ว! {dish}ร้าน {store['name']} รสชาติเข้มข้นจัดจ้าน เครื่องแน่นเต็มคำ สั่งผ่าน Shopee Food ฟินแน่นอน!"
+        spoken_b = "แซ่บคักอีหลี หอมกลิ่นกระทะคักๆ เด้อนี่!"
+    elif subtype == "ของหวาน/เครื่องดื่ม":
+        hook_a = f"หวานเย็นสดชื่น ดับร้อนฟินๆ! {dish}ร้านนี้ {store.get('rating')}⭐ ราคาดีงาม! 🍧"
+        title_a = f"ของหวานดับร้อนสุดฟิน! {dish}ย่าน{area} ⭐ ราคาดีงาม 🔥"
+        caption_a = f"🍧 สายหวานต้องเช็คอิน! {store['name']} ของอร่อยย่าน{area}\nหวานเย็นสดชื่น ถ่ายรูปสวยรสชาติละมุน\nกดสั่งดับร้อนด่วนเลย 👇"
+        voice_a = f"เติมความหวานดับร้อนกันหน่อย! {dish}ร้าน {store['name']} ของหวานฟินๆ ละมุนลิ้น แบงค์แดงมีทอน สั่งผ่าน Shopee Food ได้เลย!"
+        spoken_a = "หวานเย็นชื่นใจ ดับร้อนฟินสุดๆ!"
+
+        hook_b = f"เตือนแล้วนะ… ของหวานร้านนี้ระวังคำเดียวหยุดไม่ได้! 😋"
+        title_b = f"หวานละมุนฟินเวอร์! {dish}เจ้าเด็ดย่าน{area} 😋"
+        caption_b = f"สายของหวานห้ามพลาด! 🚨\n{dish} {store['name']} หอมหวานมันเข้มข้น ฟินทุกคำที่กิน\nสั่งผ่าน Shopee Food ส่งตรงถึงบ้าน 🛵"
+        voice_b = f"ความอร่อยแสงออกปากมาเสิร์ฟแล้ว! {dish}ร้าน {store['name']} รสชาติละมุนลิ้น หวานพอดีๆ กินแล้วฟินสุดๆ สั่งผ่าน Shopee Food ด่วน!"
+        spoken_b = "หวานมันแซ่บคัก กินแล้วหยุดบ่ได้เลยเด้อ!"
+    else:
+        hook_a = f"{dish}ร้านนี้ {store.get('rating')}⭐ แต่ราคาเท่านี้เอง?! 🤯"
+        title_a = f"คุ้มเกินราคา! {dish}ย่าน{area} {store.get('rating')}⭐ ต้องลอง 🔥"
+        caption_a = f"{store['name']} {dish}เด็ดย่าน{area}\nจาก {store.get('review_count')} รีวิวตัวจริง\nคุ้มแบบนี้รีบสั่งเลย 👇"
+        voice_a = f"บอกเลยว่าคุ้มสุดๆ! {dish}ร้าน {store['name']} {store.get('rating')} ดาว สั่งผ่าน Shopee Food คุ้มราคา แบงค์แดงมีทอน ลิงก์อยู่คอมเมนต์เลย!"
+        spoken_a = "ราคานี้ได้ไงเนี่ย คุ้มเกินไปแล้ว!"
+
+        hook_b = f"เตือนแล้วนะ… {dish}ร้านนี้กินคำแรกแล้วหยุดไม่ได้ 😋"
+        title_b = f"กินคำแรกแล้วหยุดไม่ได้ 😋 {dish}เจ้าเด็ดย่าน{area}"
+        caption_b = f"สายกินห้ามพลาด 🚨\n{dish} {store['name']} ฟินทุกคำ\nนุ่ม หอม จัดเต็ม ส่งไวถึงบ้าน 🛵"
+        voice_b = f"คำแรกก็ใจละลาย! {dish}ร้าน {store['name']} รสชาติกลมกล่อม หอมน้ำซุปเข้มข้นจนต้องร้องว้าว สั่งผ่าน Shopee Food ฟินด่วนๆ เลย!"
+        spoken_b = "แซ่บคักอีหลี กินแล้วอยู่บ่ได้เด้อ!"
+
     for p in PLATFORMS:
         variants.append({
             "label": "A", "platform": p,
-            "hook": f"{dish}ร้านนี้ {store.get('rating')}⭐ แต่ราคาเท่านี้เอง?! 🤯",
-            "video_title": f"คุ้มเกินราคา! {dish}ย่าน{area} {store.get('rating')}⭐ ต้องลอง 🔥",
-            "caption": f"{store['name']} {dish}เด็ดย่าน{area}\nจาก {store.get('review_count')} รีวิวตัวจริง\nคุ้มแบบนี้รีบสั่งเลย 👇",
+            "hook": hook_a,
+            "video_title": title_a,
+            "caption": caption_a,
             "hashtags": ["#กินอะไรดี", f"#{area.replace(' ','')}", "#ShopeeFood", "#ของกินคุ้ม", "#รีวิวร้านอร่อย"],
             "cta": "แตะลิงก์คอมเมนต์แรกสั่งเลย ก่อนโปรหมด!",
             "first_comment": f"🔗 สั่ง {dish} ร้าน {store['name']} ได้เลย 👉 {{LINK}}\nส่งไว ราคาคุ้ม 🛵",
-            "voiceover_script": f"บอกเลยว่าคุ้มสุดๆ! {dish}ร้าน {store['name']} {store.get('rating')} ดาว สั่งผ่าน Shopee Food คุ้มราคา แบงค์แดงมีทอน ลิงก์อยู่คอมเมนต์เลย!",
+            "voiceover_script": voice_a,
             "spoken_lang": "thai",
-            "spoken_line": "ราคานี้ได้ไงเนี่ย คุ้มเกินไปแล้ว!",
+            "spoken_line": spoken_a,
             "image_prompt": f"appetizing close-up of {dish}, thai food, vibrant colors, price tag vibe, 9:16 vertical, food photography",
-            "video_prompt": f"Vertical 9:16. OPENS immediately on a real Thai person looking into camera, already mid-sentence with big energy, saying: \"ราคานี้ได้ไงเนี่ย คุ้มเกินไปแล้ว!\". Then quick appetizing shots of {dish} steaming hot behind them. realistic human actor, real person, photorealistic, no cartoons, value-for-money mood, no on-screen text, no subtitles",
+            "video_prompt": f"Vertical 9:16. OPENS immediately on a real Thai person looking into camera, already mid-sentence with big energy, saying: \"{spoken_a}\". Then quick appetizing shots of {dish} steaming hot behind them. realistic human actor, real person, photorealistic, no cartoons, value-for-money mood, no on-screen text, no subtitles",
         })
         variants.append({
             "label": "B", "platform": p,
-            "hook": f"เตือนแล้วนะ… {dish}ร้านนี้กินคำแรกแล้วหยุดไม่ได้ 😋",
-            "video_title": f"กินคำแรกแล้วหยุดไม่ได้ 😋 {dish}เจ้าเด็ดย่าน{area}",
-            "caption": f"สายกินห้ามพลาด 🚨\n{dish} {store['name']} ฟินทุกคำ\nนุ่ม หอม จัดเต็ม ส่งไวถึงบ้าน 🛵",
+            "hook": hook_b,
+            "video_title": title_b,
+            "caption": caption_b,
             "hashtags": [f"#ของกิน{area.replace(' ','')}", "#คาเฟ่อุดร", "#ShopeeFood", "#กินจุก", "#ฟินเวอร์"],
             "cta": "สั่งเลยก่อนหิวกว่านี้ ลิงก์คอมเมนต์แรก!",
             "first_comment": f"😋 ทนหิวไม่ไหวแล้วใช่ไหม กดสั่งเลย 👉 {{LINK}}",
-            "voiceover_script": f"คำแรกก็ใจละลาย! {dish}ร้าน {store['name']} รสชาติกลมกล่อม หอมน้ำซุปเข้มข้นจนต้องร้องว้าว สั่งผ่าน Shopee Food ฟินด่วนๆ เลย!",
+            "voiceover_script": voice_b,
             "spoken_lang": "isaan",
-            "spoken_line": "แซ่บคักอีหลี กินแล้วอยู่บ่ได้เด้อ!",
+            "spoken_line": spoken_b,
             "image_prompt": f"top-down flatlay of {dish} with side dishes, warm cozy light, mouthwatering, 9:16 vertical",
-            "video_prompt": f"Vertical 9:16. OPENS immediately on a real local Northeastern-Thai (Isan) person looking into camera, already mid-sentence in authentic natural relaxed Isan accent (not stiff), saying: \"แซ่บคักอีหลี กินแล้วอยู่บ่ได้เด้อ!\". Then quick appetizing close-up of {dish} behind them. realistic human actor, real person, photorealistic, no cartoons, no on-screen text, no subtitles",
+            "video_prompt": f"Vertical 9:16. OPENS immediately on a real local Northeastern-Thai (Isan) person looking into camera, already mid-sentence in authentic natural relaxed Isan accent (not stiff), saying: \"{spoken_b}\". Then quick appetizing close-up of {dish} behind them. realistic human actor, real person, photorealistic, no cartoons, no on-screen text, no subtitles",
         })
     return {
         "store_analysis": {

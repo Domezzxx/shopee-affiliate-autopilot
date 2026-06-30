@@ -99,9 +99,9 @@ th{color:var(--mut);font-weight:600}
 
 .addform{margin-bottom:14px;border-left:4px solid var(--accent2)}
 .formgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:8px}
-.formgrid input{background:#11141a;border:1px solid var(--line);color:var(--txt);
+.formgrid input, .formgrid select{background:#11141a;border:1px solid var(--line);color:var(--txt);
   padding:8px 10px;border-radius:8px;font-size:13px}
-.formgrid input:focus{outline:none;border-color:var(--accent2)}
+.formgrid input:focus, .formgrid select:focus{outline:none;border-color:var(--accent2)}
 .btn-file{display:inline-block;border:1px solid var(--line);background:var(--card);
   padding:8px 12px;border-radius:8px;cursor:pointer;font-size:13px;margin-right:6px}
 .btn-file:hover{border-color:var(--accent)}

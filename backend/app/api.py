@@ -47,6 +47,7 @@ class StoreIn(BaseModel):
     affiliate_link: str = ""
     shopee_url: str = ""
     category: str = "food"           # food (ร้านอาหาร) | gadget (ร้านอุปกรณ์ IT/ของใช้บ้าน)
+    food_subtype: str = ""           # เช่น ร้านตามสั่ง, ร้านก๋วยเตี๋ยว, ของหวาน/เครื่องดื่ม, ทั่วไป
 
 
 class IngestIn(BaseModel):
@@ -61,6 +62,7 @@ def _save_store(s, st: StoreIn) -> Store:
         image_urls_json=json.dumps(st.image_urls, ensure_ascii=False),
         affiliate_link=st.affiliate_link, shopee_url=st.shopee_url,
         category=(st.category or "food"),
+        food_subtype=(st.food_subtype or ""),
     )
     s.add(obj)
     return obj
@@ -173,6 +175,7 @@ def list_stores(status: str | None = None, category: str | None = None):
                 "id": r.id, "name": r.name, "area": r.area, "rating": r.rating,
                 "review_count": r.review_count, "menu": jloads(r.menu_json, []),
                 "category": getattr(r, "category", "food") or "food",
+                "food_subtype": getattr(r, "food_subtype", "") or "",
                 "status": r.status, "low_ctr_days": r.low_ctr_days,
                 "affiliate_link": r.affiliate_link,
                 "requires_approval": r.requires_approval,
@@ -862,3 +865,23 @@ def toggle_approval(store_id: int, enable: bool):
         s.add(store)
         s.commit()
     return {"id": store_id, "requires_approval": enable}
+
+
+class StoreCategoryUpdate(BaseModel):
+    category: str
+    food_subtype: str = ""
+
+
+@router.post("/stores/{store_id}/update-category")
+def update_store_category(store_id: int, payload: StoreCategoryUpdate):
+    """อัปเดตหมวดหมู่และประเภทร้านอาหารย่อยแบบไดนามิก."""
+    with get_session() as s:
+        store = s.get(Store, store_id)
+        if not store:
+            raise HTTPException(404, "store not found")
+        store.category = payload.category
+        store.food_subtype = payload.food_subtype
+        s.add(store)
+        s.commit()
+        s.refresh(store)
+    return {"id": store_id, "category": store.category, "food_subtype": store.food_subtype}

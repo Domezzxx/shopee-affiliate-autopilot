@@ -35,6 +35,7 @@ class Store(SQLModel, table=True):
     affiliate_link: str = ""
     shopee_url: str = ""
     category: str = "food"           # food (ร้านอาหาร) | gadget (ร้านอุปกรณ์ IT/ของใช้บ้าน)
+    food_subtype: str = ""           # เช่น ร้านตามสั่ง, ร้านก๋วยเตี๋ยว, ของหวาน/เครื่องดื่ม, ทั่วไป
     status: str = "new"              # new | active | paused
     low_ctr_days: int = 0            # นับวัน CTR ต่ำติดกัน → ถึงเกณฑ์แล้ว pause
     reel_url: str = ""               # คลิปรวม (montage A/B) ที่สร้างไว้
@@ -120,7 +121,7 @@ def _migrate() -> None:
                     ("spoken_lang", "TEXT DEFAULT ''"), ("spoken_line", "TEXT DEFAULT ''")],
         "post": [("comment_id", "TEXT DEFAULT ''"), ("comment_status", "TEXT DEFAULT ''")],
         "store": [("reel_url", "TEXT DEFAULT ''"), ("requires_approval", "BOOLEAN DEFAULT FALSE"),
-                  ("category", "TEXT DEFAULT 'food'")],
+                  ("category", "TEXT DEFAULT 'food'"), ("food_subtype", "TEXT DEFAULT ''")],
     }
     with engine.begin() as conn:
         for table, cols in new_cols.items():
