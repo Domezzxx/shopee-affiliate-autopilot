@@ -61,11 +61,12 @@ def promo_round(n: int | None = None, platforms=("facebook", "instagram")) -> di
             photo = promo_image.get_promo_photo(st.id)
             if not photo:
                 continue
-            img = promo_image.make_promo(st, photo, v.hook)
+            style = ["viral_neon", "viral_collage", "viral_editorial", "viral_banner"][picked % 4]
+            img = promo_image.make_promo(st, photo, v.hook, style=style)
             if not img:
                 continue
             plat = platforms[picked % len(platforms)]
-            cap = v.caption or st.name
+            cap = promo_image.make_caption(st, v.hook, v.caption)   # แคปชั่นป้ายยาร้านอาหาร
             res = social.publish(plat, cap, img)         # โพสต์ภาพนิ่ง
             p = Post(variant_id=v.id, store_id=st.id, platform=plat,
                      method=res["method"], account=res["account"], external_id=res["external_id"],

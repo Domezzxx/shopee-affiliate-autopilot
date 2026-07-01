@@ -99,7 +99,14 @@ SYSTEM = (
     "ใช้คำลงท้าย/คำเชื่อมอีสานจริง (เด้อ, สิ, กะ, อีหลี, โพด, คัก, จั่งแม่น, นัว) เช่น 'แซ่บคักอีหลี กินแล้วอยู่บ่ได้เด้อ', "
     "'จั่งแม่นแซ่บ มื้อนี้สั่งโลด', 'ลองเบิ่งเด้อ นัวโพดเลย'. "
     "english=โทนวัยรุ่นไวรัลสั้นๆ เช่น 'Wait—only 75 baht?!', 'Stop scrolling, trust me'.\n"
-    "• image_prompt/video_prompt = อังกฤษ เน้นสไตล์ภาพโฆษณาอาหารสตูดิโอระดับโปร (commercial food photography, studio food styling, dramatic volumetric lighting, ultra-realistic food textures, glossy sauce, steam rising, sharp focus, f/1.8, high-end food advertising poster style, dark moody backdrop to make the vibrant food pop). สำหรับวิดีโอต้องมีคนพูดเปิดคลิปตามโครงสร้าง และใส่คำบังคับ: realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings.\n"
+    "• image_prompt/video_prompt = ภาษาอังกฤษ โดยเขียนตามสูตรโครงสร้าง: [Subject] + [Sensory Details] + [Dynamic Action/Motion] + [Lighting Setup] + [Composition & Copy Space] + [Backdrop & Styling] + [Technical Parameters]\n"
+    "  - Subject: เจาะจงส่วนประกอบเด่นของอาหารอย่างละเอียด ไม่บอกแค่ชื่ออาหารลอยๆ\n"
+    "  - Sensory Details: รสสัมผัสทางตา เช่น ชุ่มฉ่ำซอส (glistening glossy sauce dripping), ขอบกรอบเกรียม (crisp caramelized edges), ชีสยืดเยิ้ม (oozing cheese pull)\n"
+    "  - Dynamic Action/Motion: ความเคลื่อนไหว เช่น ควันร้อนกรุ่น (whispering steam rising backlit), ผัก/พริกโรยสาดในอากาศ (scattering fresh herbs/sparks caught in mid-air), ซอสกระเซ็น (dynamic sauce splash)\n"
+    "  - Lighting Setup: แสงแบบโฆษณาระดับโปร เช่น แสงเฉียง 45 องศา (dramatic side lighting) เน้นเท็กซ์เจอร์, แสงขอบ (subtle rim lighting) สร้างมิติ, แสงย้อนฉายควันให้เรืองแสง (volumetric backlighting to make steam/broth glow)\n"
+    "  - Composition & Copy Space: เจาะลึกมุมมองโฆษณา (commercial food photography, mouthwatering macro close-up, 45-degree hero shot, shallow depth of field, f/1.8) และระบุให้เว้นพื้นที่สำหรับใส่ข้อความโฆษณา เช่น 'leave empty copy space in the upper third for text'\n"
+    "  - Backdrop & Styling: ตกแต่งอาหารระดับโปร (professional food styling) ฉากหลังเข้มดึงให้อาหารเด่นป็อป (dark moody backdrop / dark rustic tabletop to make the vibrant colors pop)\n"
+    "  - สำหรับวิดีโอต้องมีคนพูดเปิดคลิปตามโครงสร้าง และใส่คำบังคับ: realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings.\n"
     "  **video_prompt ต้องสั่งให้คลิปเปิดมาที่คนพูดทันที** (ห้ามเปิดด้วยภาพอาหารนิ่งๆ ก่อน — น่าเบื่อ). โครงสร้าง: "
     "'Vertical 9:16. OPENS immediately on [ระบุผู้พูด] looking straight into camera, already mid-sentence with big friendly energy, saying: \"<บทพูดตรงกับ spoken_line>\". "
     "Then quick appetizing shots of [เมนู] behind/around them.' "
@@ -128,9 +135,13 @@ def _prompt(store: dict, label: str) -> str:
             "- Hook ต้องสะกิดต่อมสายประหยัด เช่น 'ราคานี้ได้ยังไง?', 'คุ้มกว่านี้มีอีกไหม?'\n"
             "- video_title ต้องใช้ตัวเลขหรือยอดขาย หรือความประหยัดนำหน้า มีอีโมจิดึงดูด\n"
             "- voiceover_script ต้องพากย์เสียงพากย์ชวนตื่นเต้น มีพลัง พูดถึงดีลเด็ด ความคุ้มราคา คุ้มค่าและประหยัดแบบสะใจสุดๆ ดึงดูดให้อยู่ดูต่อ\n"
-            "- image_prompt และ video_prompt ต้องเป็นภาษาอังกฤษ เน้นแนวภาพโฆษณาอาหารสตูดิโอระดับโปร (commercial food photography, high-end food advertising poster style) "
-            "เน้นความน่ากินของอาหารจานโต สีสันจัดจ้าน (appetizing vibrant colors) แสงเงาจัดจ้านระดับมืออาชีพ (dramatic studio lighting, volumetric lighting, key light) "
-            "และมีควันลอยฉุยน่าทาน (steam rising) หรือซอสชุ่มฉ่ำแวววาว (glistening glossy texture) บนพื้นหลังสีเข้ม (dark moody backdrop) ที่ช่วยดันให้ตัวอาหารโดดเด่นสะกดทุกสายตา "
+            "- image_prompt และ video_prompt ต้องเป็นภาษาอังกฤษ และเขียนเรียงตามสูตร [Subject] + [Sensory Details] + [Dynamic Action] + [Lighting Setup] + [Composition & Copy Space] + [Backdrop & Styling] + [Technical Parameters] "
+            "เน้นสไตล์ภาพโฆษณาเชิงพาณิชย์เกรดพรีเมียม (commercial food photography, high-end food advertising poster style) "
+            "โดยชูความน่ากินจัดจ้าน เช่น ซอสหนืดมันวาวไหลเยิ้ม (glistening glossy sauce dripping/glaze), ชีสยืดสะใจ (oozing cheese pull), ผิวกรอบขอบเกรียมสีทองหอมหวน (crisp caramelized edges). "
+            "จัดแสงสไตล์โฆษณา (dramatic key lighting, strong side lighting at 45 degrees) เพื่อดึงมิติพื้นผิวอาหาร. "
+            "วางมุมกล้องแบบภาพถ่ายโฆษณา (commercial composition, sharp focus, f/1.8, shallow depth of field) "
+            "และต้องระบุให้เว้นที่ว่างครึ่งบน/ขวาของภาพสำหรับวางตัวหนังสือ CTA เสมอ (leave empty copy space in the upper third/side for poster text overlays). "
+            "เน้นพื้นหลังมืดสลัวตัดกับสีอาหาร (dark moody studio backdrop to make the vibrant food colors pop) "
             "พร้อมเงื่อนไขบังคับ 'realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings'"
         )
     else:
@@ -140,11 +151,12 @@ def _prompt(store: dict, label: str) -> str:
             "- Hook ต้องเปิดด้วยอาการทรมานความหิว เช่น 'เห็นคลิปนี้ตอนดึกขออภัยด้วยนะ', 'คำแรกถึงกับหลับตาฟิน'\n"
             "- video_title เน้นความฟิน ความแซ่บ หรือความอร่อยที่หยุดไม่อยู่\n"
             "- voiceover_script ต้องพากย์เสียงพากย์ด้วยคำบรรยายที่เห็นภาพชัดเจน รสชาตินุ่มละมุน ความเข้มข้น ความหอมกรุ่นชวนกิน เพื่อกระตุ้นความหิวดึงดูดให้อยู่ดูต่อจนจบ\n"
-            "- image_prompt และ video_prompt ต้องเป็นภาษาอังกฤษ เน้นความน่ากินระดับทลายความหิวด้วยภาพซูมโคลสอัพความละเอียดสูง (mouthwatering macro close-up, 8k resolution) "
-            "มีการจัดองค์ประกอบศิลป์แบบภาพโฆษณาพรีเมียม (professional food styling, award-winning food photography) "
-            "แสดงสัมผัสที่คมชัด (ultra-realistic food textures) ควันร้อนๆ ลอยกรุ่น (hot steam rising) ซอสไหลเยิ้มแวววาว (glistening sauce dripping / cheese pull) "
-            "ใช้แสงแนวสตูดิโอเน้นมิติความลึก (dramatic studio lighting, shallow depth of field, sharp focus, f/1.8) "
-            "บนพื้นหลังสีมืดที่มีเงาตัดสวยงาม (dark rustic backdrop with high contrast) "
+            "- image_prompt และ video_prompt ต้องเป็นภาษาอังกฤษ และเขียนเรียงตามสูตร [Subject] + [Sensory Details] + [Dynamic Action] + [Lighting Setup] + [Composition & Copy Space] + [Backdrop & Styling] + [Technical Parameters] "
+            "เน้นความน่ากินชวนหิวแสงออกปากด้วยมุมกล้องซูมโคลสอัพใกล้เป็นพิเศษระดับมาโคร (mouthwatering macro close-up, 8k resolution) "
+            "แสดงดีเทลรสสัมผัสคมชัดสูง (ultra-realistic food textures) และความสดใหม่. "
+            "สร้างความเคลื่อนไหวด้วยควันร้อนกรุ่นลอยตัวพุ่งฉุย (whispering hot steam rising), หรือวัตถุดิบผักชี/เครื่องเทศโรยสาดกระจายตัวในอากาศ (fresh herbs scattering dynamically around). "
+            "จัดแสงเพื่อสร้างบรรยากาศสุดดรามาติกด้วยแสงเฉียงเน้นเท็กซ์เจอร์ (dramatic side lighting) ร่วมกับแสงย้อนฉายทะลุผ่านควันหรือน้ำซุปให้เรืองแสงมีประกาย (volumetric backlighting to make steam/soup glow) และแสงขอบเน้นสรีระ (rim lighting). "
+            "วางบนฉากหลังโทนธรรมชาติเข้ม/ rustic (dark rustic wood table, dark slate backdrop with high contrast), มีการตกแต่งจานอย่างประณีต (professional food styling) "
             "พร้อมเงื่อนไขบังคับ 'realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings'"
         )
         
@@ -261,8 +273,8 @@ def _mock(store: dict) -> dict:
             "voiceover_script": voice_a,
             "spoken_lang": "thai",
             "spoken_line": spoken_a,
-            "image_prompt": f"commercial food photography of {dish}, high-end food advertising poster style, vibrant appetizing colors, hot steam rising, professional food styling, dramatic volumetric studio lighting, key light, dark moody backdrop, sharp focus, vertical 9:16",
-            "video_prompt": f"Vertical 9:16. OPENS immediately on a real Thai person looking into camera, already mid-sentence with big energy, saying: \"{spoken_a}\". Then quick appetizing shots of {dish} behind them, steam rising, glistening sauce, dramatic studio lighting. realistic human actor, real person, photorealistic, no cartoons, value-for-money mood, no on-screen text, no subtitles",
+            "image_prompt": f"commercial food photography of {dish}, high-end food advertising poster style, oozing cheese pull and glistening thick glossy sauce dripping, dramatic side lighting at 45 degrees, professional food styling, leave empty copy space in the upper third for poster text overlays, dark moody studio backdrop with high contrast, sharp focus, f/1.8, vertical 9:16",
+            "video_prompt": f"Vertical 9:16. OPENS immediately on a real Thai person looking into camera, already mid-sentence with big energy, saying: \"{spoken_a}\". Then quick appetizing shots of {dish} behind them, glistening sauce dripping, dramatic key light, dark studio backdrop. realistic human actor, real person, photorealistic, no cartoons, value-for-money mood, no on-screen text, no subtitles",
         })
         variants.append({
             "label": "B", "platform": p,
@@ -275,8 +287,8 @@ def _mock(store: dict) -> dict:
             "voiceover_script": voice_b,
             "spoken_lang": "isaan",
             "spoken_line": spoken_b,
-            "image_prompt": f"mouthwatering macro close-up of {dish}, glistening rich food texture, hot steam rising, cinematic studio lighting with deep contrast, fresh ingredients scattered beautifully, dark rustic kitchen backdrop, 8k resolution, professional food styling, f/1.8, sharp focus, vertical 9:16",
-            "video_prompt": f"Vertical 9:16. OPENS immediately on a real local Northeastern-Thai (Isan) person looking into camera, already mid-sentence in authentic natural relaxed Isan accent, saying: \"{spoken_b}\". Then quick appetizing macro close-up of {dish} with steaming sauce pouring over it, dramatic volumetric lighting. realistic human actor, real person, photorealistic, no cartoons, no on-screen text, no subtitles",
+            "image_prompt": f"mouthwatering macro close-up of {dish}, glistening rich food textures, whispering hot steam rising backlit, dramatic volumetric lighting making the steam glow, rim lighting to emphasize edges, fresh ingredients scattered dynamically around, dark rustic wood table background, 8k resolution, professional food styling, f/1.8, sharp focus, vertical 9:16",
+            "video_prompt": f"Vertical 9:16. OPENS immediately on a real local Northeastern-Thai (Isan) person looking into camera, already mid-sentence in authentic natural relaxed Isan accent, saying: \"{spoken_b}\". Then quick appetizing macro close-up of {dish} with whispering hot steam backlit and glowing, sauce dripping, dark rustic background. realistic human actor, real person, photorealistic, no cartoons, no on-screen text, no subtitles",
         })
     return {
         "store_analysis": {
