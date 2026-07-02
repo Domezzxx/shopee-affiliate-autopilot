@@ -121,7 +121,7 @@ def make_promo_all(category: str | None = None, limit: int | None = None) -> dic
     if limit:
         stores = stores[:limit]
     gen = skip = 0
-    styles = ["viral_neon", "viral_collage", "viral_editorial", "viral_banner"]
+    styles = ["premium_set", "viral_banner", "viral_editorial", "viral_neon", "viral_collage"]
     for idx, st in enumerate(stores):
         try:
             photo = get_promo_photo(st.id)
@@ -139,7 +139,7 @@ def make_promo_all(category: str | None = None, limit: int | None = None) -> dic
 def make_promo(store, photo_path: str, hook: str = "", style: str = "viral_neon") -> str | None:
     """สร้างภาพโปรโมท 1080x1350 → คืน path (None ถ้าทำไม่ได้)."""
     try:
-        from PIL import Image, ImageDraw, ImageFont, ImageOps
+        from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
     except Exception:
         return None
     bold, reg = _font_paths()
@@ -425,6 +425,91 @@ def make_promo(store, photo_path: str, hook: str = "", style: str = "viral_neon"
         cta = "สั่งเลย — ลิงก์ใต้โพสต์ ↓"
         cw = d.textlength(cta, font=F(34, True))
         d.text((btn_x + (btn_w - cw) // 2, btn_y + 18), cta, font=F(34, True), fill=(255, 255, 255))
+
+    elif style == "premium_set":
+        # ---------- PREMIUM DARK+GOLD "เซตสุดคุ้ม" (แรงบันดาลใจ: โปสเตอร์เซตอีสาน/ราเมนในกลุ่ม GCT) ----------
+        GOLD = (212, 175, 55)
+        GOLD_LT = (244, 220, 130)
+        DARKBG = (20, 17, 14)
+        CREAM = (245, 238, 222)
+        img = Image.new("RGB", (W, H), DARKBG)
+
+        # วงแสงอุ่นหลังอาหาร (radial glow) ให้จานเด่นลอยขึ้นมา
+        glow = Image.new("L", (W, H), 0)
+        ImageDraw.Draw(glow).ellipse([W // 2 - 470, 340, W // 2 + 470, 1200], fill=80)
+        glow = glow.filter(ImageFilter.GaussianBlur(170))
+        warm = Image.new("RGBA", (W, H), (150, 95, 35, 0)); warm.putalpha(glow)
+        img = Image.alpha_composite(img.convert("RGBA"), warm).convert("RGB")
+        d = ImageDraw.Draw(img, "RGBA")
+
+        # กรอบมุมทอง 4 มุม
+        def corner(x, y, dx, dy, ln=70):
+            d.line([(x, y), (x + dx * ln, y)], fill=GOLD, width=4)
+            d.line([(x, y), (x, y + dy * ln)], fill=GOLD, width=4)
+        corner(46, 46, 1, 1); corner(W - 46, 46, -1, 1)
+        corner(46, H - 46, 1, -1); corner(W - 46, H - 46, -1, -1)
+
+        # ป้ายหมวดบนสุด (เส้นขอบทอง)
+        top_label = getattr(store, "food_subtype", "") or "เมนูแนะนำ"
+        tf = F(28, True); tlw = d.textlength(top_label, font=tf)
+        d.rounded_rectangle([W // 2 - tlw // 2 - 26, 88, W // 2 + tlw // 2 + 26, 148],
+                            radius=30, outline=GOLD, width=2)
+        d.text((W // 2 - tlw // 2, 99), top_label, font=tf, fill=GOLD_LT)
+
+        # ชื่อร้าน (ทอง กลาง)
+        nf = fit(d, nm, W - 170, 74)
+        d.text((W // 2 - d.textlength(nm, font=nf) // 2, 168), nm, font=nf, fill=GOLD_LT)
+
+        # เส้นคั่นทอง + เพชร
+        dvy = 168 + nf.size + 20
+        d.line([(W // 2 - 190, dvy), (W // 2 - 26, dvy)], fill=GOLD, width=2)
+        d.line([(W // 2 + 26, dvy), (W // 2 + 190, dvy)], fill=GOLD, width=2)
+        d.polygon([(W // 2, dvy - 9), (W // 2 - 13, dvy), (W // 2, dvy + 9), (W // 2 + 13, dvy)], fill=GOLD)
+
+        # แผงรูปอาหาร (มุมมน กรอบทอง)
+        px0, py0, px1, py1 = 95, 300, 985, 985
+        pw, ph = px1 - px0, py1 - py0
+        orig_img = Image.open(photo_path).convert("RGB")
+        food = ImageOps.fit(orig_img, (pw, ph), centering=(0.5, 0.5))
+        rmask = Image.new("L", (pw, ph), 0)
+        ImageDraw.Draw(rmask).rounded_rectangle([0, 0, pw, ph], radius=34, fill=255)
+        img.paste(food, (px0, py0), rmask)
+        d.rounded_rectangle([px0, py0, px1, py1], radius=34, outline=GOLD, width=5)
+
+        # แท็ก "เมนูเด็ด" มุมซ้ายบนของแผง
+        tag = "เมนูเด็ด"; tgf = F(27, True); tgw = d.textlength(tag, font=tgf)
+        d.rounded_rectangle([px0 - 6, py0 - 8, px0 + tgw + 40, py0 + 50], radius=12, fill=GOLD)
+        d.text((px0 + 18, py0 + 4), tag, font=tgf, fill=(38, 26, 4))
+
+        # ป้ายราคาวงกลมทอง (มุมขวาล่างของแผง)
+        if price_val:
+            bx, by, br = px1 - 42, py1 - 44, 94
+            d.ellipse([bx - br, by - br, bx + br, by + br], fill=GOLD)
+            d.ellipse([bx - br + 7, by - br + 7, bx + br - 7, by + br - 7], outline=(150, 118, 34), width=2)
+            sf2 = F(22, True)
+            d.text((bx - d.textlength("เริ่มต้น", font=sf2) // 2, by - 48), "เริ่มต้น", font=sf2, fill=(70, 50, 12))
+            pf = fit(d, price_val, br * 2 - 26, 54)
+            d.text((bx - d.textlength(price_val, font=pf) // 2, by - 16), price_val, font=pf, fill=(36, 26, 6))
+
+        # ===== ส่วนล่าง: ดาว + hook + CTA =====
+        yb = 1030
+        n_star = 5
+        sx = W // 2 - (n_star * 46) // 2
+        rr = round(getattr(store, "rating", 5) or 5)
+        for i in range(n_star):
+            star(d, sx + i * 46 + 18, yb + 16, 15, GOLD if i < rr else (95, 84, 56))
+        rate_txt = f"{store.rating} · อร่อยระดับบอกต่อ"
+        d.text((W // 2 - d.textlength(rate_txt, font=F(26, True)) // 2, yb + 42), rate_txt,
+               font=F(26, True), fill=CREAM)
+        if hk:
+            hf2 = fit(d, hk, W - 170, 40, b=False)
+            d.text((W // 2 - d.textlength(hk, font=hf2) // 2, yb + 92), hk, font=hf2, fill=(212, 202, 182))
+
+        # ปุ่ม CTA แถบทอง
+        cyb = H - 152
+        d.rounded_rectangle([90, cyb, W - 90, cyb + 84], radius=42, fill=GOLD)
+        cta = "สั่งเลย — ลิงก์ใต้โพสต์ ↓"; cf = F(40, True)
+        d.text((W // 2 - d.textlength(cta, font=cf) // 2, cyb + 19), cta, font=cf, fill=(30, 22, 6))
 
     else:
         # ------------------ STYLE: CLASSIC (Original Fallback) ------------------

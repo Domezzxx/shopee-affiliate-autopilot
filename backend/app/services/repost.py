@@ -61,7 +61,7 @@ def promo_round(n: int | None = None, platforms=("facebook", "instagram")) -> di
             photo = promo_image.get_promo_photo(st.id)
             if not photo:
                 continue
-            style = ["viral_neon", "viral_collage", "viral_editorial", "viral_banner"][picked % 4]
+            style = ["premium_set", "viral_banner", "viral_editorial", "viral_neon", "viral_collage"][picked % 5]
             img = promo_image.make_promo(st, photo, v.hook, style=style)
             if not img:
                 continue

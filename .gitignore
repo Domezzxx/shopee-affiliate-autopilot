@@ -4,6 +4,7 @@
 # data + generated media (ภาพ/วีดีโอที่ Gemini สร้าง + sqlite)
 data/
 adb/
+samples/
 
 # python
 __pycache__/

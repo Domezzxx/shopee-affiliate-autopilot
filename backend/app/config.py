@@ -96,6 +96,8 @@ class Settings(BaseSettings):
 
     # Promo image mode — สร้างภาพโปรโมทนิ่ง (ฟรี ไม่ใช้ Flow) แล้วโพสต์ FB/IG อัตโนมัติ
     promo_mode: bool = False              # true = autopilot สร้าง+โพสต์ภาพโปรโมทแทนสร้างคลิป
+    promo_campaign: str = ""              # ป้ายแคมเปญบนโปสเตอร์ (เช่น "ไทยช่วยไทย 60/40") เว้นว่าง=ไม่โชว์
+    promo_ai_mode: str = "photo"          # โหมดรูป AI: photo (อาหารจริง) | cartoon (การ์ตูน) | mix
 
     # Repost mode — โพสต์ซ้ำคลิปเดิม (ตอน media credit หมด: Flow/Gemini รูป) แทนการสร้างใหม่
     repost_mode: bool = False             # true = autopilot โพสต์ซ้ำคลิปเก่าแทนสร้างใหม่
