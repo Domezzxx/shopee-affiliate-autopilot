@@ -17,7 +17,8 @@ from sqlmodel import select
 from ..config import settings
 from ..db import Metric, Variant, get_session
 
-_MIN_IMPRESSIONS = 200          # กลุ่มต้องมี impression รวมขั้นต่ำเท่านี้ถึงเชื่อผล
+_MIN_IMPRESSIONS = 200          # เกณฑ์ 'มั่นใจสูง' (high confidence)
+_MIN_IMPRESSIONS_EARLY = 50     # เกณฑ์ 'สัญญาณเบื้องต้น' (real-time) — ร้านเล็ก/ยอดวิวช้าก็ได้ปรับ ไม่ต้องรอนาน
 _MIN_GROUPS = 2                 # ต้องมีอย่างน้อย 2 ตัวเลือกถึงจะเทียบ "อันไหนดีกว่า"
 
 
@@ -25,9 +26,10 @@ def _insights_path() -> str:
     return os.path.join(settings.data_dir, "insights.json")
 
 
-def _agg(rows: list[tuple[str, int, int, int]], rank_by: str = "ctr") -> dict:
+def _agg(rows: list[tuple[str, int, int, int]], rank_by: str = "ctr",
+         min_imp: int = _MIN_IMPRESSIONS) -> dict:
     """rows = [(key, impressions, clicks, engagement)] → {key: {imp, clk, eng, ctr, eng_rate}}
-    เรียงตาม rank_by ('ctr' หรือ 'eng_rate')."""
+    เรียงตาม rank_by ('ctr' หรือ 'eng_rate'). นับเฉพาะกลุ่มที่ impression ถึง min_imp (ปรับได้)."""
     acc: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
     for key, imp, clk, eng in rows:
         if not key:
@@ -35,7 +37,7 @@ def _agg(rows: list[tuple[str, int, int, int]], rank_by: str = "ctr") -> dict:
         acc[key][0] += imp; acc[key][1] += clk; acc[key][2] += eng
     out = {}
     for k, (imp, clk, eng) in acc.items():
-        if imp >= _MIN_IMPRESSIONS:                  # นับเฉพาะกลุ่มที่ข้อมูลพอ
+        if imp >= min_imp:                           # นับเฉพาะกลุ่มที่ข้อมูลพอ (ตามเกณฑ์ที่ส่งเข้ามา)
             out[k] = {"impressions": imp, "clicks": clk, "engagement": eng,
                       "ctr": round(clk / imp, 4) if imp else 0.0,
                       "eng_rate": round(eng / imp, 4) if imp else 0.0}
@@ -67,22 +69,29 @@ def build_insights() -> dict:
     use_eng = (total_imp > 0 and (total_clk / total_imp) < 0.0005)
     rank_by = "eng_rate" if use_eng else "ctr"
 
-    by_lang = _agg(by_lang_rows, rank_by)
-    by_label = _agg(by_label_rows, rank_by)
-    by_platform = _agg(by_plat_rows, rank_by)
+    # เกณฑ์ปรับตามปริมาณข้อมูล (real-time optimization): ข้อมูลเยอะ→ใช้เกณฑ์มั่นใจสูง,
+    # ข้อมูลน้อย→ใช้เกณฑ์เบื้องต้น เพื่อให้ร้านเล็ก/ยอดวิวช้าได้รับการปรับด้วย (ไม่ต้องรอ 200 impressions)
+    min_imp = _MIN_IMPRESSIONS if total_imp >= _MIN_IMPRESSIONS else _MIN_IMPRESSIONS_EARLY
+    confidence = "high" if total_imp >= _MIN_IMPRESSIONS else "provisional"
+
+    by_lang = _agg(by_lang_rows, rank_by, min_imp)
+    by_label = _agg(by_label_rows, rank_by, min_imp)
+    by_platform = _agg(by_plat_rows, rank_by, min_imp)
 
     # hook/บทพูดที่ปังจริง — variant ที่อัตรา (ctr/eng_rate) สูง + impression พอ
     top = []
     for vid, (imp, clk, eng, v) in var_perf.items():
         rate = (eng / imp if use_eng else clk / imp) if imp else 0.0
-        if imp >= max(50, _MIN_IMPRESSIONS // 2) and rate > 0:
+        if imp >= max(20, min_imp // 2) and rate > 0:
             top.append({"rate": round(rate, 4), "impressions": imp,
                         "spoken_lang": v.spoken_lang, "platform": v.platform, "label": v.label,
                         "hook": (v.spoken_line or v.hook or "")[:80]})
     top.sort(key=lambda x: x["rate"], reverse=True)
 
     data = {
-        "ready": total_imp >= _MIN_IMPRESSIONS,
+        "ready": total_imp >= _MIN_IMPRESSIONS_EARLY,
+        "confidence": confidence,          # high | provisional (บอกว่าเชื่อได้แค่ไหน)
+        "min_impressions_used": min_imp,
         "metric_mode": rank_by,   # ctr | eng_rate
         "baseline_ctr": round(total_clk / total_imp, 4) if total_imp else 0.0,
         "baseline_eng_rate": round(total_eng / total_imp, 4) if total_imp else 0.0,
@@ -116,11 +125,25 @@ def get_insights() -> dict:
         return {"ready": False}
 
 
+def learned_lang_order(default: list[str]) -> tuple[list[str], bool]:
+    """ลำดับภาษาบทพูดเรียงตาม 'ผลตอบรับจริง' (ดีสุดก่อน) เพื่อให้ตัวเขียนคอนเทนต์ 'ทำตามที่เรียนรู้' จริง —
+    ไม่ใช่แค่รายงานแล้วจบ. เติมภาษาที่ยังไม่มีข้อมูลต่อท้ายตาม default (คงการสำรวจ). คืน (ลำดับ, ready?).
+    ข้อมูลไม่พอ/ไม่ ready → คืน (default, False) เพื่อไม่กระทบพฤติกรรมเดิม."""
+    d = get_insights()
+    lang = d.get("by_spoken_lang", {})
+    ranked = [k for k in lang.keys() if k and k != "unknown"]   # by_spoken_lang เรียงตาม performance อยู่แล้ว
+    if not d.get("ready") or len(ranked) < _MIN_GROUPS:
+        return list(default), False
+    merged = ranked + [x for x in default if x not in ranked]
+    return merged, True
+
+
 def insights_prompt() -> str:
     """แปลงบทเรียนเป็นคำแนะนำสั้นๆ ฉีดเข้า prompt ของ Claude — คืน '' ถ้าข้อมูลยังไม่พอ."""
     d = get_insights()
     if not d.get("ready"):
         return ""
+    conf_note = " (เบื้องต้น — ข้อมูลยังน้อย ใช้เป็นแนวโน้ม ปรับได้เร็วแบบ real-time)" if d.get("confidence") == "provisional" else ""
     mode = d.get("metric_mode", "ctr")
     rkey = "eng_rate" if mode == "eng_rate" else "ctr"
     mlabel = "engagement-rate" if mode == "eng_rate" else "CTR"
@@ -150,6 +173,6 @@ def insights_prompt() -> str:
     if not lines:
         return ""
     base = d.get("baseline_eng_rate", 0) if mode == "eng_rate" else d.get("baseline_ctr", 0)
-    return ("\n\n📊 บทเรียนจากผลงานจริงที่ผ่านมา (data-driven — ทำตามนี้เพื่อให้ดีขึ้นเรื่อยๆ):\n"
+    return (f"\n\n📊 บทเรียนจากผลงานจริงที่ผ่านมา{conf_note} (data-driven — ทำตามนี้เพื่อให้ดีขึ้นเรื่อยๆ):\n"
             + "\n".join(lines)
             + f"\n(วัดด้วย {mlabel}, ฐานเฉลี่ย {base*100:.2f}% จาก {d.get('total_impressions',0):,} impressions)")

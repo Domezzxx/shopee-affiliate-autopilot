@@ -58,10 +58,10 @@ def promo_round(n: int | None = None, platforms=("facebook", "instagram")) -> di
             v = s.exec(select(Variant).where(Variant.store_id == st.id)).first()
             if not v:
                 continue
-            photo = promo_image.get_promo_photo(st.id)
+            style = ["premium_set", "viral_banner", "viral_editorial", "viral_neon", "viral_collage"][picked % 5]
+            photo = promo_image.get_promo_photo(st.id, style=style)   # style → รูปตั้งต้นแสง/โทนตรงกับ layout
             if not photo:
                 continue
-            style = ["premium_set", "viral_banner", "viral_editorial", "viral_neon", "viral_collage"][picked % 5]
             img = promo_image.make_promo(st, photo, v.hook, style=style)
             if not img:
                 continue

@@ -73,8 +73,9 @@ def make_caption(store, hook: str = "", base_caption: str = "") -> str:
     return "\n".join(parts)
 
 
-def get_promo_photo(store_id: int) -> str | None:
-    """หาภาพอาหารของร้าน: เฟรมจากคลิปวิดีโอที่มีอยู่ → image_path → รูป Shopee จริง."""
+def get_promo_photo(store_id: int, style: str = "") -> str | None:
+    """หาภาพอาหารของร้าน: เฟรมจากคลิปวิดีโอที่มีอยู่ → image_path → รูป Shopee จริง →
+    (ไม่มีเลย) รูป AI ที่ 'แสง/โทนตรงกับ layout' (style) — ให้รูปกับดีไซน์ไปด้วยกัน + ครอบคลุมร้านที่ยังไม่มีสื่อ."""
     from ..db import Variant, get_session
     from ..engines import video_ffmpeg
     from sqlmodel import select
@@ -103,6 +104,19 @@ def get_promo_photo(store_id: int) -> str | None:
                 return imgs[0]
     except Exception as e:  # pragma: no cover
         print(f"[promo] photo dl fail store {store_id}: {str(e)[:60]}")
+    # 4) ไม่มีรูปจริงเลย → generate รูปตั้งต้นด้วย AI ให้แสง/โทน 'ตรงกับ layout' (style) ที่จะใช้
+    try:
+        from . import promo_ai
+        from ..db import Store, get_session
+        with get_session() as s:
+            st = s.get(Store, store_id)
+        if st:
+            mode = "cartoon" if settings.promo_ai_mode == "cartoon" else "photo"
+            ai = promo_ai.get_ai_image(st, mode=mode, style=style, w=W, h=H)
+            if ai and os.path.exists(ai):
+                return ai
+    except Exception as e:  # pragma: no cover
+        print(f"[promo] ai base fail store {store_id}: {str(e)[:60]}")
     return None
 
 
@@ -124,8 +138,8 @@ def make_promo_all(category: str | None = None, limit: int | None = None) -> dic
     styles = ["premium_set", "viral_banner", "viral_editorial", "viral_neon", "viral_collage"]
     for idx, st in enumerate(stores):
         try:
-            photo = get_promo_photo(st.id)
             style = styles[idx % len(styles)]
+            photo = get_promo_photo(st.id, style=style)   # ส่ง style ให้รูปตั้งต้น (AI) แสง/โทนตรงกับ layout
             if photo and make_promo(st, photo, hooks.get(st.id, ""), style=style):
                 gen += 1
             else:

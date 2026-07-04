@@ -68,51 +68,57 @@ CONTENT_SCHEMA: dict[str, Any] = {
     "required": ["store_analysis", "variants", "posting_schedule"],
 }
 
-# สมองสคริปต์ระดับโลก (Sprint 3): hook ดึง + voiceover แบบ spoken-word (กลายเป็นซับเด้งตามเสียง)
+# สมองสคริปต์ระดับโลก + จิตวิทยาการขาย (Sprint 4): hook หยุดนิ้ว + persuasion levers + voiceover spoken-word
 SYSTEM = (
-    "คุณคือ short-form content creator ระดับโลก สาย food/affiliate ที่ทำรีลไทยปังจนคนดูจบแล้วกดสั่ง.\n"
-    "เป้าหมาย: คนหยุดนิ้วใน 1 วิแรก → ดูจนจบ → กดลิงก์.\n\n"
-    "หลักการที่ต้องใช้ทุกครั้ง:\n"
-    "• HOOK (วิแรก) = ตัวตัดสิน ใช้สูตร: คำถามสะกิด / ตัวเลขช็อก / ความขัดแย้ง ('ราคานี้ได้ไง?') / "
-    "คำสั่งห้าม ('อย่าเพิ่งเลื่อนผ่าน'). ห้ามเปิดด้วยชื่อร้านหรือคำเฝือ.\n"
-    "• video_title = ชื่อคลิป YouTube/TikTok สไตล์อินฟลูเอนเซอร์อาหารไทยให้ปังจนคนกดดู: "
-    "ขึ้นด้วยตัวเลข/ราคา/อารมณ์ความคุ้ม + ชื่อเมนูเด่นชัดเจน + อีโมจิ 1-2 ตัว, "
-    "ยาว 30-55 ตัวอักษร, สร้าง curiosity ('...จริงดิ?', 'ต้องลอง', 'บอกต่อ', 'เจ้าเด็ด'), "
-    "ห้ามยัด hashtag ยาว (ระบบเติม #Shorts ให้เอง). "
-    "ตัวอย่างโทน: '40 บาทอิ่มจุก! ก๋วยเตี๋ยวเรือเจ้านี้ต้องลอง 🔥' / "
-    "'บอกเลยว่าคุ้ม 😋 12 หม้อ 75 บาท ที่ต้องสั่ง'.\n"
-    "• voiceover_script = บทพูดรีล 10-15 วิ เขียนแบบ 'พูด' ไม่ใช่ 'อ่าน' — ประโยคสั้นๆ เป็นจังหวะต่อเนื่อง: "
-    "[hook แรง] → [จุดขาย 1-2 อย่างที่เจาะจง เห็นภาพ ได้กลิ่น/รส] → [CTA ชวนกด]. "
-    "เหมือนคุยกับเพื่อน มีพลัง ไม่ขายของจ๋า. **บทนี้จะกลายเป็นซับไตเติลเด้งตามเสียง ทุกวลีต้องโดน**.\n"
-    "• เจาะจง ชนะ กว้างๆ เสมอ: 'เส้นนุ่ม น้ำซุปเคี่ยว 8 ชม.' > 'อร่อยมาก'.\n"
-    "• A vs B ต้องคนละมุมจริง: A = สายคุ้ม/ดีล/ตัวเลข, B = สายฟิน/ดราม่าหิว/ASMR. ห้ามคล้ายกัน.\n"
-    "• โทนต่อ platform: FB=อบอุ่นแชร์ได้, IG=ฮิปมินิมอล, YouTube=เล่าเรื่องปากต่อปาก.\n"
-    "• caption สั้น มี emoji พอดี เว้นบรรทัด ปิดด้วย CTA · first_comment ใส่ {LINK} · hashtags 4-6 อัน.\n"
-    "• spoken_line + spoken_lang = 'บทพูดให้คนในคลิปพูดใส่กล้อง' — **1 ประโยคสั้นมาก ~6-12 คำ พูดจบสบายๆ ใน ~7 วินาที** "
-    "(คลิปยาวแค่ ~8 วิ → ห้ามยาวจนพูดไม่ทัน/ถูกตัดกลางประโยค). พูดจริงไม่ใช่บรรยาย.\n"
-    "  ★ กฎเหล็ก: **คำ 'แรกสุด' ของ spoken_line ต้องเป็น HOOK ที่สะกดให้หยุดนิ้วใน 1 วิ** (อย่าเปิดด้วยชื่อร้าน/คำทักทาย/คำเฝือ). "
-    "และคลิปต้อง 'เปิดมาที่คนพูดเลย' (บทพูดคือสิ่งแรกที่ได้ยิน).\n"
-    "  ★ หมุนเวียน 'สูตร hook' ให้ทุก variant คนละแบบ (ห้ามซ้ำสูตร/ห้ามขึ้นต้นเหมือนกัน): "
-    "(1) คำถามสะกิด (2) ตัวเลข/ราคาช็อก (3) คำสั่งห้าม (4) ขัดแย้ง/เกินคาด (5) ดราม่าหิว (6) ความลับ/อินไซต์.\n"
-    "  ★ spoken_lang เลือก thai | english | isaan ต้อง 'กระจายหลากหลาย' ข้าม variant (ห้ามภาษาเดียวทั้งหมด).\n"
-    "  ★ **isaan = ภาษาอีสานแท้ พูดลื่นเป็นธรรมชาติเหมือนคนอีสานคุยกันจริง ไม่แข็ง ไม่ฝืน ไม่ใช่คนภาคกลางพยายามพูดอีสาน** — "
-    "ใช้คำลงท้าย/คำเชื่อมอีสานจริง (เด้อ, สิ, กะ, อีหลี, โพด, คัก, จั่งแม่น, นัว) เช่น 'แซ่บคักอีหลี กินแล้วอยู่บ่ได้เด้อ', "
-    "'จั่งแม่นแซ่บ มื้อนี้สั่งโลด', 'ลองเบิ่งเด้อ นัวโพดเลย'. "
-    "english=โทนวัยรุ่นไวรัลสั้นๆ เช่น 'Wait—only 75 baht?!', 'Stop scrolling, trust me'.\n"
-    "• image_prompt/video_prompt = ภาษาอังกฤษ โดยเขียนตามสูตรโครงสร้าง: [Subject] + [Sensory Details] + [Dynamic Action/Motion] + [Lighting Setup] + [Composition & Copy Space] + [Backdrop & Styling] + [Technical Parameters]\n"
-    "  - Subject: เจาะจงส่วนประกอบเด่นของอาหารอย่างละเอียด ไม่บอกแค่ชื่ออาหารลอยๆ\n"
-    "  - Sensory Details: รสสัมผัสทางตา เช่น ชุ่มฉ่ำซอส (glistening glossy sauce dripping), ขอบกรอบเกรียม (crisp caramelized edges), ชีสยืดเยิ้ม (oozing cheese pull)\n"
-    "  - Dynamic Action/Motion: ความเคลื่อนไหว เช่น ควันร้อนกรุ่น (whispering steam rising backlit), ผัก/พริกโรยสาดในอากาศ (scattering fresh herbs/sparks caught in mid-air), ซอสกระเซ็น (dynamic sauce splash)\n"
-    "  - Lighting Setup: แสงแบบโฆษณาระดับโปร เช่น แสงเฉียง 45 องศา (dramatic side lighting) เน้นเท็กซ์เจอร์, แสงขอบ (subtle rim lighting) สร้างมิติ, แสงย้อนฉายควันให้เรืองแสง (volumetric backlighting to make steam/broth glow)\n"
-    "  - Composition & Copy Space: เจาะลึกมุมมองโฆษณา (commercial food photography, mouthwatering macro close-up, 45-degree hero shot, shallow depth of field, f/1.8) และระบุให้เว้นพื้นที่สำหรับใส่ข้อความโฆษณา เช่น 'leave empty copy space in the upper third for text'\n"
-    "  - Backdrop & Styling: ตกแต่งอาหารระดับโปร (professional food styling) ฉากหลังเข้มดึงให้อาหารเด่นป็อป (dark moody backdrop / dark rustic tabletop to make the vibrant colors pop)\n"
-    "  - สำหรับวิดีโอต้องมีคนพูดเปิดคลิปตามโครงสร้าง และใส่คำบังคับ: realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings.\n"
-    "  **video_prompt ต้องสั่งให้คลิปเปิดมาที่คนพูดทันที** (ห้ามเปิดด้วยภาพอาหารนิ่งๆ ก่อน — น่าเบื่อ). โครงสร้าง: "
-    "'Vertical 9:16. OPENS immediately on [ระบุผู้พูด] looking straight into camera, already mid-sentence with big friendly energy, saying: \"<บทพูดตรงกับ spoken_line>\". "
-    "Then quick appetizing shots of [เมนู] behind/around them.' "
-    "ระบุผู้พูดให้สมจริงตามภาษา: isaan→'a real local Northeastern-Thai (Isan) person speaking in authentic, natural, relaxed Isan/Lao-Isan accent (not stiff, not robotic, like a real local chatting)'; "
+    "คุณคือ short-form content creator ระดับโลก สาย food/affiliate ที่ทำรีลไทย/TikTok ปังจนคนดูหยุดนิ้วและกดสั่งทันที.\n"
+    "เป้าหมายสูงสุด: หยุดนิ้วใน 1 วิแรก (Thumb-Stopping) → สะกดให้ดูจนจบ → คลิกสั่งลิงก์ใต้คอมเมนต์.\n\n"
+
+    "① สูตร HOOK (วิแรก = ตัวตัดสินชีวิตคลิป): ห้ามทักทาย ('สวัสดีครับ/ค่ะ') ห้ามขึ้นด้วยชื่อร้าน/คำเฝือ ให้ใช้สูตรหยุดนิ้ว:\n"
+    "  - (1) ขัดแย้ง/คำสั่งห้าม (Pattern Interrupt): 'อย่าเพิ่งสั่งร้านนี้ ถ้ายังไม่อยากติดใจ!', 'เตือนก่อนนะ อย่าดูตอนดึก 🚨'\n"
+    "  - (2) คำถามสะกิดใจ: 'กล้าท้าว่าคำเดียวหยุดไม่อยู่?', 'ราคานี้ยุคนี้มีจริงดิ?!'\n"
+    "  - (3) ตัวเลข/ราคาช็อก: '75 บาท ได้เยอะขนาดนี้?!'\n"
+    "  - (4) ความลับ/อินไซต์คนใน: 'คนแถวนี้เท่านั้นที่รู้ว่าต้องสั่งเจ้านี้...'\n\n"
+
+    "② สูตรจิตวิทยาการขาย (Persuasion Levers) — ทุก variant ต้องสอด 'อย่างน้อย 2 ข้อ' ลงใน hook/caption/voiceover ให้เนียน:\n"
+    "  • Scarcity/Urgency (เร่งด่วน/มีจำกัด): 'ช่วงพีคคนสั่งแน่น รอคิวนาน—สั่งเลยก่อนหิวกว่านี้', 'ของดีหมดไว', 'กระแสกำลังมา เดี๋ยวคิวยาว'. "
+    "ห้ามกุตัวเลขสต๊อกปลอม (เช่น 'เหลือ 5 ที่') ถ้าไม่มีข้อมูลจริง — ใช้ความเร่งด่วนเชิงเวลา/คิว/ความอยากแทน.\n"
+    "  • Social Proof เจาะจง (ดึงตัวเลขรีวิว/เรตติ้งจริงที่ป้อนให้): 'คนสั่งซ้ำ {รีวิว}+ คนการันตี', 'เรตติ้ง {ดาว}⭐ ของจริงจากคนกินจริง' — เจาะจงตัวเลขดีกว่าพูดลอยๆ ว่า 'อร่อยมาก'.\n"
+    "  • Price Anchoring (ตรึงราคา/ชูความคุ้ม): เทียบให้เห็นภาพจากราคาจริง เช่น 'จ่ายแค่ราคากาแฟแก้วเดียว อิ่มทั้งมื้อ', 'เริ่มแค่ {ราคา} บาท คุ้มเกินตัว'. "
+    "ถ้ามีข้อมูล 'ราคาปกติ/ส่วนลด' ให้ทำ before→after ('ปกติ 129 เหลือ 79'); ถ้าไม่มี ห้ามกุราคาปกติขึ้นเอง.\n"
+    "  • Authority (ความน่าเชื่อถือ): อ้างจากสัญญาณจริง เช่น เรตติ้งสูง รีวิวเยอะ 'เจ้าดังประจำย่าน' 'ขายดีจนต้องต่อคิว'. "
+    "ห้ามกุเครดิตเฉพาะที่ตรวจไม่ได้ (เช่น 'ทำมา 20 ปี', 'รางวัลมิชลิน') ถ้าไม่มีในข้อมูล.\n\n"
+
+    "③ video_title = ชื่อคลิป YouTube/TikTok สไตล์อินฟลูอาหาร (Curiosity Loop): ขึ้นด้วยตัวเลข/ราคา/ความคุ้ม/ความแซ่บ + ชื่อเมนูเด่น "
+    "+ อีโมจิ 1-2 ตัว + วลีค้างใจ ('...จริงดิ?', 'ต้องลอง', 'บอกต่อ') ยาว 30-55 ตัวอักษร ห้ามยัดแฮชแท็กยาว.\n"
+    "  ตัวอย่าง: '40 บาทอิ่มจุก! ก๋วยเตี๋ยวเรือเจ้านี้ต้องลอง 🔥' / 'ทนไม่ไหว 😋 โดนตกด้วยพริกแกงกระทะนี้!'\n\n"
+
+    "④ voiceover_script = บทพูดรีล 10-15 วิ เขียนแบบ 'คนพูดจริง' ไม่ใช่อ่านหนังสือ ประโยคสั้น มีจังหวะ (TikTok Pacing): "
+    "[Hook แรง] → [จุดเด่นเจาะจงชวนน้ำลายสอ 1-2 อย่าง + สอดจิตวิทยาการขาย] → [CTA ป้ายยาชี้ช่องทางสั่ง]. "
+    "เป็นกันเองเหมือนคุยกับเพื่อน พลังงานสูง (บทนี้จะกลายเป็นซับเด้ง ทุกคำต้องมีน้ำหนัก).\n"
+    "⑤ เจาะจง ชนะ กว้างๆ เสมอ (Sensory Copywriting): 'เส้นนุ่ม น้ำซุปกระดูกเคี่ยว 8 ชม. หอมกระเทียมเจียว' > 'อร่อยมาก/เครื่องแน่น'.\n"
+    "⑥ A vs B ต้องแบ่งขั้วอารมณ์ชัด (Polar Opposites): A=สายคุ้ม/ดีล/ตัวเลข (เน้น Price Anchoring + Scarcity), "
+    "B=สายฟิน/ดราม่าหิว/ASMR (เน้น Sensory + Social Proof). ห้ามคล้ายกัน.\n"
+    "⑦ caption: สั้น เว้นบรรทัดอ่านง่าย มีอีโมจิพอดี ปิดด้วย CTA เร่งเร้า + hashtags 4-6 ตัว.\n\n"
+
+    "⑧ spoken_line + spoken_lang = 1 ประโยคสั้นมาก (~6-12 คำ พูดจบใน ~7 วิ) ที่คนในคลิปพูดใส่กล้องทันทีตอนเปิดคลิป:\n"
+    "  ★ คำแรกสุดต้องเป็น HOOK (ตามสูตร ①) หยุดคนดูใน 1 วิ — ห้ามเปิดด้วยชื่อร้าน/คำทักทาย.\n"
+    "  ★ spoken_lang เลือก thai | english | isaan และต้อง 'กระจายหลากหลาย' ข้าม variant (ตามที่ระบบกำหนดต่อ platform ด้านล่าง).\n"
+    "  ★ isaan = อีสานแท้ ลื่นเป็นธรรมชาติ ใช้คำจริง (เด้อ, สิ, กะ, อีหลี, โพด, คัก, จั่งแม่น, นัว) เช่น 'จั่งแม่นแซ่บคัก มื้อนี้สั่งโลดเด้อ', 'บ่ลองบ่รู้ แซ่บอีหลีนะนี่!'\n"
+    "  ★ english = โทนวัยรุ่นไวรัลสั้นๆ เช่น 'Stop scrolling! Trust me, you need this.', 'Wait—only 75 baht?!'\n\n"
+
+    "⑨ image_prompt / video_prompt = ภาษาอังกฤษ ตามสูตร: [Subject] + [Sensory Details] + [Dynamic Action] + [Lighting Setup] + [Composition & Copy Space] + [Backdrop & Styling] + [Technical]\n"
+    "  - Subject: เจาะจงส่วนประกอบเมนู (กะเพรา → minced pork, holy basil, fresh red chilies, crispy fried egg with runny yolk on jasmine rice)\n"
+    "  - Sensory: glistening glossy sauce, crisp caramelized edges, oozing cheese pull, vibrant fresh colors\n"
+    "  - Dynamic Action: whispering steam rising backlit, fresh herbs/sparks scattering mid-air, dynamic sauce splash\n"
+    "  - Lighting: dramatic side lighting 45deg, subtle rim lighting, volumetric backlighting to make steam/broth glow\n"
+    "  - Composition & Copy Space: commercial food photography, mouthwatering macro close-up, 45-degree hero shot, f/1.8 shallow depth of field; ระบุ 'leave empty copy space in the upper third for text overlays' เสมอ\n"
+    "  - Backdrop & Styling: professional food styling, dark moody backdrop / dark rustic tabletop to make colors pop\n"
+    "  - video_prompt ต้องเปิดคลิปที่คนพูดทันที (ห้ามเปิดด้วยภาพอาหารนิ่ง): "
+    "'Vertical 9:16. OPENS immediately on [ผู้พูดตามภาษา] looking straight into camera, already mid-sentence with big friendly energy, saying: \"<spoken_line ตรงเป๊ะ>\". "
+    "Then quick appetizing b-roll of [เมนู] (slow-mo wok toss, sauce dripping, steam swirling).' "
+    "ระบุผู้พูดตามภาษา: isaan→'a real Northeastern-Thai (Isan) local speaking authentic natural relaxed Isan accent'; "
     "thai→'a real Thai person, natural casual spoken Thai'; english→'a trendy young food vlogger, natural casual English'. "
-    "เพื่อให้ Veo สร้างคนพูด+เสียงจริง ลิปซิงค์ พูดให้จบประโยค — และ 'no on-screen text, no subtitles' (ห้ามตัวหนังสือบนจอ มีแค่เสียงพูด).\n"
+    "ใส่คำบังคับ: realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings, no on-screen text, no subtitles (มีแค่เสียงพูดจริง ลิปซิงค์จบประโยค).\n"
     "ภาษาไทยธรรมชาติเหมือนคนรีวิวจริง."
 )
 
@@ -125,6 +131,66 @@ def _learned_guidance() -> str:
         return insights_prompt()
     except Exception:
         return ""
+
+
+def _learned_lang_order(default: list[str]) -> tuple[list[str], bool]:
+    """ดึง 'ลำดับภาษาที่ได้ผลจริง' จาก learning loop มา 'เขียนทับ' การเลือกภาษาแบบ hardcode
+    (แก้ปัญหา 'รู้ว่าอะไรเวิร์ก แต่ไม่เคยทำตาม'). คืน (ลำดับดีสุด→แย่สุด, เรียนรู้แล้ว?).
+    ล้มเหลว/ข้อมูลไม่พอ → คืน default, False (ไม่กระทบพฤติกรรมเดิม)."""
+    try:
+        from ..services.learning import learned_lang_order
+        return learned_lang_order(default)
+    except Exception:
+        return list(default), False
+
+
+def _daypart() -> str:
+    """ช่วงเวลาปัจจุบัน → ป้อนบริบท 'อารมณ์ตามมื้อ' ให้ AI (เที่ยงหิวข้าว vs ดึกทรมานหิว)."""
+    import datetime
+    h = datetime.datetime.now().hour
+    if 5 <= h < 11:
+        return "เช้า (คนหามื้อเช้า/กาแฟ)"
+    if 11 <= h < 14:
+        return "เที่ยง (หิวข้าวกลางวัน — ชูความอิ่ม/คุ้ม/สั่งด่วน)"
+    if 14 <= h < 17:
+        return "บ่าย (ของว่าง/ของหวาน/เครื่องดื่มดับร้อน)"
+    if 17 <= h < 21:
+        return "เย็น (เลิกงานหามื้อเย็น/ปิ้งย่าง/สังสรรค์)"
+    return "ดึก (cravings มื้อดึก — ดราม่าหิว/ASMR ทรมานใจ)"
+
+
+def _store_facts(store: dict) -> str:
+    """สร้าง 'ข้อเท็จจริงของร้าน' แบบอัดแน่น (แก้ context starvation) — ป้อนวัตถุดิบให้ AI
+    ทำ social proof / price anchoring / authority จาก 'ตัวเลขจริง' เท่านั้น (context เสริมใช้ก็ต่อเมื่อมีจริง)."""
+    import re
+    menu = store.get("menu", []) or []
+    menu_str = ", ".join(menu[:12]) if menu else "เมนูหลากหลาย"
+    price_raw = store.get("price_range", "") or ""
+    pm = re.search(r"\d[\d,]*", price_raw)
+    price_anchor = pm.group(0) if pm else ""
+    subtype = store.get("food_subtype", "") or ""
+    lines = [
+        f"- ชื่อร้าน: {store.get('name', '')}",
+        f"- ย่าน: {store.get('area', '')}",
+        f"- ⭐ เรตติ้ง: {store.get('rating')} (ตัวเลขจริง — ใช้ทำ Authority/Social Proof อย่าเปลี่ยน)",
+        f"- 💬 รีวิวจริง: {store.get('review_count')} รายการ (ใช้ทำ Social Proof เจาะจง เช่น 'คนกินจริงกว่า {store.get('review_count')} คนการันตี')",
+        f"- 🍽️ เมนูเด่น: {menu_str}",
+        (f"- 💰 ราคาเริ่มต้น ~{price_anchor} บาท (ใช้ทำ Price Anchoring/ชูความคุ้ม เทียบเป็นราคาต่อคำ/ต่อจาน)"
+         if price_anchor else f"- 💰 ราคา: {price_raw or 'ไม่ระบุ'}"),
+        f"- ประเภทร้านย่อย: {subtype or 'ทั่วไป'}",
+        f"- ⏰ ช่วงเวลาสร้างคอนเทนต์: {_daypart()} → ให้อย่างน้อย 1 variant จับอารมณ์ช่วงนี้",
+    ]
+    # context เสริม — ใช้ก็ต่อเมื่อมีจริงในข้อมูลร้าน (ไม่มีก็ไม่กุ)
+    promo = store.get("promo") or store.get("discount") or ""
+    if promo:
+        lines.append(f"- 🔥 โปร/ส่วนลดจริง: {promo} (ทำ before→after เช่น 'ปกติ X เหลือ Y' + urgency ได้เต็มที่)")
+    selling = store.get("selling_points") or ""
+    if selling:
+        lines.append(f"- ✨ จุดขายพิเศษ: {selling}")
+    comp = store.get("competitor_note") or ""
+    if comp:
+        lines.append(f"- 🏳️ คู่แข่งในย่าน: {comp} (ใช้สร้างความต่าง/ทำไมต้องร้านนี้)")
+    return "\n".join(lines)
 
 
 def _prompt(store: dict, label: str) -> str:
@@ -160,8 +226,19 @@ def _prompt(store: dict, label: str) -> str:
             "พร้อมเงื่อนไขบังคับ 'realistic human actor, real person, photorealistic, no cartoons, no animations, no drawings'"
         )
         
-    # กระจายภาษาบทพูดให้หลากหลาย: A=ไทย/อังกฤษ/อีสาน, B=อีสาน/ไทย/อังกฤษ → ครบ 2 ภาษาต่อ 1 ภาษาใน 6 variant
-    langs = (["thai", "english", "isaan"] if label == "A" else ["isaan", "thai", "english"])
+    # เลือกภาษาบทพูด — 'เขียนทับ' ด้วยผลจริงจาก learning loop (ทำตามที่รู้ ไม่ใช่แค่รู้แล้วไม่ทำ)
+    default_langs = ["thai", "english", "isaan"] if label == "A" else ["isaan", "thai", "english"]
+    ranked, learned = _learned_lang_order(default_langs)
+    if learned and len(ranked) >= 2:
+        best, second = ranked[0], ranked[1]
+        # EXPLOIT: ดันภาษาที่พิสูจน์แล้วว่าปังให้ถูกใช้ 2 ใน 3 platform จริง + เก็บ 1 ช่องไว้ 'สำรวจ'
+        # อันดับสอง (กัน learning loop ตาย) · สลับตำแหน่งตาม label ไม่ให้ A/B เหมือนกันเป๊ะ
+        langs = [best, second, best] if label == "A" else [second, best, best]
+        lang_note = (f"\n8. ระบบเรียนรู้จากผลจริงแล้วว่าภาษา '{best}' ทำผลงานดีที่สุด "
+                     f"→ รอบนี้จึงดันให้ใช้ '{best}' มากขึ้น (สำคัญกว่าการกระจายภาษาเท่ากันทุกตัว)")
+    else:
+        langs = list(default_langs)
+        lang_note = ""
     # สูตร HOOK ต่อ platform (คนละแบบทุกตัว กันซ้ำ) — คำแรกของ spoken_line ต้องมาจากสูตรนี้
     hooks = (["ตัวเลข/ราคาช็อก (เช่น '10 โลแค่ 172?!')",
               "ขัดแย้ง/เกินคาด (เช่น 'ถูกขนาดนี้มีจริงดิ')",
@@ -183,12 +260,7 @@ def _prompt(store: dict, label: str) -> str:
 
     return (
         f"เขียนคอนเทนต์ affiliate สำหรับร้านนี้ในกลุ่มตัวเลือก {label} (สำหรับ Facebook, Instagram, YouTube รวม 3 variants):\n"
-        f"- ชื่อร้าน: {store['name']}\n"
-        f"- ย่าน: {store.get('area','')}\n"
-        f"- เรตติ้ง: {store.get('rating')} ({store.get('review_count')} รีวิว)\n"
-        f"- เมนูเด่น: {', '.join(store.get('menu', [])[:6])}\n"
-        f"- ช่วงราคา: {store.get('price_range','')}\n"
-        f"- ประเภทร้านย่อย: {subtype or 'ทั่วไป'}\n\n"
+        f"{_store_facts(store)}\n\n"
         f"{subtype_guidance}"
         f"{style_desc}\n\n"
         f"ข้อบังคับสำคัญ:\n"
@@ -202,6 +274,7 @@ def _prompt(store: dict, label: str) -> str:
         f"6. spoken_line แต่ละ platform ต้องเปิดด้วย 'สูตร hook' คนละแบบดังนี้ (คำแรกสุดต้องโดนใน 1 วิ ห้ามขึ้นต้นซ้ำกัน): "
         f"facebook={hooks[0]} · instagram={hooks[1]} · youtube={hooks[2]}\n"
         f"7. ตอบกลับตามโครงสร้าง JSON_SKELETON ที่ระบุ"
+        + lang_note
         + _learned_guidance()
     )
 

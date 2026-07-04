@@ -66,19 +66,33 @@ def _dish_hint(store) -> str:
     return _DEFAULT_DISH
 
 
-def photo_prompt(store) -> str:
+# แสง/โทน/ฉากหลัง ให้ 'ตรงกับ layout' ของ promo_image (รูปตั้งต้นกับดีไซน์จะได้ไปด้วยกัน)
+_STYLE_LOOK = {
+    "premium_set":     "dramatic dark moody backdrop, warm golden rim lighting, luxury fine-dining plating, deep rich shadows, amber and gold tones, elegant premium advertising",
+    "viral_neon":      "dark night-market scene, vibrant neon glow, high contrast, bold saturated colors, energetic street-food vibe, cinematic",
+    "viral_editorial": "clean bright white editorial studio, soft even daylight, minimal elegant negative space, crisp modern food-magazine look",
+    "viral_collage":   "warm retro film tones, nostalgic vintage magazine styling, cozy rustic wooden props, slightly grainy analog feel",
+    "viral_banner":    "clean bright commercial studio, soft box lighting, simple uncluttered background, sharp product-hero look",
+}
+_DEFAULT_LOOK = "bright natural daylight, vibrant saturated appetizing colors, fresh steam, on rustic Thai table"
+
+
+def photo_prompt(store, style: str = "") -> str:
     dish = _dish_hint(store)
+    look = _STYLE_LOOK.get(style, _DEFAULT_LOOK)
     return (f"professional commercial food photography of {dish}, "
-            "bright natural daylight, vibrant saturated appetizing colors, fresh steam, "
-            "shallow depth of field, top-down and 45 degree, on rustic Thai table, "
-            "ultra detailed, mouth-watering, high resolution, food magazine quality, no text, no watermark")
+            f"{look}, "
+            "shallow depth of field, 45 degree hero angle, ultra detailed, mouth-watering, "
+            "high resolution, food magazine quality, leave clean empty space for text overlay, no text, no watermark")
 
 
-def cartoon_prompt(store) -> str:
+def cartoon_prompt(store, style: str = "") -> str:
     dish = _dish_hint(store)
+    bg = {"premium_set": "elegant dark warm background with golden bokeh",
+          "viral_neon": "vibrant neon night-market background"}.get(style, "warm market background with bokeh lanterns")
     return (f"Thai street food advertising poster illustration, exaggerated caricature cartoon style, "
             f"cheerful chubby Thai vendor character joyfully presenting {dish}, "
-            "vivid saturated colors, warm market background with bokeh lanterns, dynamic energetic, "
+            f"vivid saturated colors, {bg}, dynamic energetic, "
             "comic pop-art, thick clean outlines, highly detailed mascot art, professional, no text, no watermark")
 
 
@@ -114,7 +128,11 @@ def gen_image(prompt: str, w: int = 1080, h: int = 1080, seed: int | None = None
     return None
 
 
-def get_ai_image(store, mode: str = "photo", w: int = 1080, h: int = 1350) -> str | None:
-    """สร้างรูปตั้งต้นตามโหมด (photo|cartoon) — seed=store.id ให้ผลคงที่ต่อร้าน."""
-    prompt = cartoon_prompt(store) if mode == "cartoon" else photo_prompt(store)
-    return gen_image(prompt, w, h, seed=int(getattr(store, "id", 0) or 0) + (7 if mode == "cartoon" else 0))
+def get_ai_image(store, mode: str = "photo", style: str = "", w: int = 1080, h: int = 1350) -> str | None:
+    """สร้างรูปตั้งต้นตามโหมด (photo|cartoon) + สไตล์ layout — seed คงที่ต่อ (ร้าน, สไตล์) ให้ผลนิ่ง
+    และแยก cache ต่อสไตล์ (รูปแสง/โทนจะได้ตรงกับดีไซน์โปสเตอร์)."""
+    prompt = cartoon_prompt(store, style) if mode == "cartoon" else photo_prompt(store, style)
+    seed = int(getattr(store, "id", 0) or 0) + (7 if mode == "cartoon" else 0)
+    if style:
+        seed += int(hashlib.md5(style.encode()).hexdigest(), 16) % 1000
+    return gen_image(prompt, w, h, seed=seed)
