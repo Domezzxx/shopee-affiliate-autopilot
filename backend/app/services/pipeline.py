@@ -40,6 +40,28 @@ def progress_list() -> list[dict]:
     return sorted(out, key=lambda x: x["ts"])
 
 
+# ข้อความ error ที่ 'แก้ด้วยการลองใหม่ไม่ได้' (คีย์ผิด/ฟีเจอร์ปิด) → ไม่ต้องเสียเวลา retry
+_PERMANENT_ERR = ("ENABLE_VIDEO=false", "ไม่มีการตั้งค่า", "รูปแบบคีย์ไม่ถูกต้อง", "ไม่มีสิทธิ์")
+
+
+def _retry(fn, tries: int = 2, base_delay: float = 2.0, label: str = ""):
+    """เรียก fn() พร้อม retry แบบ backoff เชิงเส้น — คืนผลเมื่อสำเร็จ, ครบจำนวนครั้งค่อย raise.
+    ถ้าเจอ error ประเภทถาวร (คีย์/ฟีเจอร์ปิด) จะ raise ทันทีไม่ retry (กันเสียเวลา)."""
+    last = None
+    for attempt in range(1, tries + 1):
+        try:
+            return fn()
+        except Exception as e:
+            last = e
+            msg = str(e)
+            if any(m in msg for m in _PERMANENT_ERR):
+                raise
+            print(f"[retry] {label} ครั้ง {attempt}/{tries} ล้มเหลว: {msg[:120]}")
+            if attempt < tries:
+                time.sleep(base_delay * attempt)
+    raise last
+
+
 def generate_for_store(store_id: int) -> dict:
     """ขั้น 2+3: Claude เขียน + Gemini ทำสื่อ → สร้าง ContentJob + 6 Variant พร้อมสื่อ + คอมเมนต์แรก."""
     with get_session() as s:
@@ -81,10 +103,24 @@ def generate_for_store(store_id: int) -> dict:
 
         variants = data["variants"]
         total = len(variants) or 1
+        ok_count, fail_count = 0, 0
         for i, v in enumerate(variants):
             _prog(store_id, name, f"🎬 สร้างสื่อ {i + 1}/{total}", 18 + int(i / total * 64),
                   detail=f"{v['platform']} · {v['label']}")
-            mtype, mpath, ipath, msource = media_gemini.make_media(v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"], v["label"], product_image=product_img, spoken_line=v.get("spoken_line", ""))
+            try:
+                mtype, mpath, ipath, msource = _retry(
+                    lambda v=v: media_gemini.make_media(
+                        v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"],
+                        v["label"], product_image=product_img, spoken_line=v.get("spoken_line", "")),
+                    tries=2, label=f"media {v['platform']}/{v['label']}")
+                ok_count += 1
+            except Exception as e:
+                # variant นี้สร้างสื่อไม่สำเร็จ (ลองซ้ำแล้ว) → ข้ามสื่อ แต่ยังเก็บแคปชั่น/hook ไว้ (ไม่ทิ้งทั้งงาน)
+                fail_count += 1
+                print(f"[media] variant {i + 1}/{total} ({v['platform']}/{v['label']}) ล้มเหลวถาวร: {str(e)[:120]}")
+                _prog(store_id, name, f"⚠️ สื่อ {i + 1}/{total} ล้มเหลว — ข้าม (เก็บแคปชั่นไว้)",
+                      18 + int(i / total * 64), detail=f"{v['platform']} · {v['label']}")
+                mtype, mpath, ipath, msource = "none", "", "", "error"
             s.add(Variant(
                 content_job_id=job.id, store_id=store.id, label=v["label"],
                 platform=v["platform"], hook=v["hook"],
@@ -98,8 +134,15 @@ def generate_for_store(store_id: int) -> dict:
             ))
         store.status = "active"
         s.add(store); s.commit()
-        _prog(store_id, name, "💾 บันทึกสื่อเสร็จ", 88)
-        return {"content_job_id": job.id, "variants": 6, "cost_baht": cost}
+        # ล้มเหลวทุกชิ้น = error จริง (ไม่มีอะไรให้โพสต์), บางส่วนล้ม = สำเร็จบางส่วน (ยังเดินต่อได้)
+        if ok_count == 0:
+            _prog(store_id, name, "❌ สร้างสื่อไม่สำเร็จเลยสักชิ้น", 100, status="error")
+            return {"error": "media generation failed for all variants",
+                    "content_job_id": job.id, "media_ok": 0, "media_failed": fail_count}
+        note = f"💾 บันทึกสื่อเสร็จ ({ok_count}/{total}" + (f", {fail_count} ล้มเหลว)" if fail_count else ")")
+        _prog(store_id, name, note, 88)
+        return {"content_job_id": job.id, "variants": total, "cost_baht": cost,
+                "media_ok": ok_count, "media_failed": fail_count}
 
 
 def _affiliate_link(store: Store) -> str:
@@ -194,6 +237,13 @@ def publish_job(content_job_id: int) -> dict:
                 media = montages[v.label]     # โพสต์คลิปรวม (หลายภาษา) แทนคลิปเดี่ยว
             elif v.platform == "youtube" and reel_local and not _is_video_file(media):
                 media = reel_local        # YouTube ต้องวีดีโอ → ใช้ reel แทนภาพ
+            # variant ที่สร้างสื่อไม่สำเร็จ (ไม่มีไฟล์สื่อเลย) → ข้าม ไม่โพสต์ข้อความเปล่า
+            if not media or not os.path.exists(media):
+                _prog(sid, name, f"⏭️ ข้าม {v.platform} {v.label} (ไม่มีสื่อ)", 90 + int((idx + 1) / n * 9))
+                posted.append({"platform": v.platform, "label": v.label, "ok": False,
+                               "method": "skip", "account": "", "external_id": "",
+                               "error": "ไม่มีไฟล์สื่อ (สร้างไม่สำเร็จ)", "comment": ""})
+                continue
             # ข้ามถ้าสื่อ+platform ซ้ำกับที่โพสต์ไปแล้วในรอบนี้ (กัน duplicate → โดน platform ลบ)
             mkey = (v.platform, os.path.basename(media) if media else "")
             if mkey in posted_media:

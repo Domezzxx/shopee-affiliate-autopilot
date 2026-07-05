@@ -232,48 +232,110 @@ def _ass_t(sec: float) -> str:
     return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
+# สีไฮไลต์คำที่ 'พูดไปแล้ว' (TikTok karaoke sweep) — ASS ใช้ BGR: &H00BBGGRR
+_HL_COLORS = [
+    "&H0000FFFF",  # เหลืองสด
+    "&H0014FF39",  # เขียวนีออน (#39FF14)
+    "&H0000C8FF",  # ส้มทอง
+    "&H00FFFF00",  # ฟ้าไซแอน
+]
+# สีฐาน (คำที่ 'ยังไม่พูด') — ขาว/นวล อ่านง่าย
+_BASE_COLORS = ["&H00FFFFFF", "&H00F5FFFA", "&H00FFFFE0"]
+
+
+def _kara_tokens(text: str, dur_cs: int) -> str:
+    """แตกข้อความเป็น token แล้วใส่ \\kf (karaoke fill) ตามสัดส่วนความยาว → ไฮไลต์กวาดทีละคำตามจังหวะเสียง.
+    - มีช่องว่าง (อังกฤษ/อีสาน) → แบ่งทีละคำจริง
+    - ไม่มีช่องว่าง (ไทย) → แบ่งเป็นชิ้นตัวอักษร ~3 ตัว (กวาดเป็นจังหวะ ไม่ต้องตัดคำ)
+    รวม cs ของทุก token = dur_cs พอดี (เศษยัดใส่ token สุดท้าย)."""
+    t = (text or "").replace("\n", " ").replace("{", "(").replace("}", ")").strip()
+    if not t:
+        return ""
+    if " " in t:
+        toks = [w + " " for w in t.split(" ") if w != ""]
+    else:
+        toks = [t[i:i + 3] for i in range(0, len(t), 3)] or [t]
+    weights = [max(1, len(x.strip()) or 1) for x in toks]
+    total = sum(weights) or 1
+    parts, acc = [], 0
+    for i, (tok, w) in enumerate(zip(toks, weights)):
+        cs = max(1, dur_cs - acc) if i == len(toks) - 1 else max(1, round(dur_cs * w / total))
+        acc += cs
+        parts.append(f"{{\\kf{cs}}}{tok}")
+    return "".join(parts)
+
+
 def _build_ass(segs: list[tuple[str, float, float]]) -> str:
     import random
     out = os.path.join(settings.media_dir, f"_cap_{uuid.uuid4().hex[:8]}.ass")
-    # สุ่มขนาดฟอนต์และสีเพื่อหลีกเลี่ยงการซ้ำของคลื่นรูปแบบตัวอักษร
+    # สุ่มขนาดฟอนต์ + สีไฮไลต์ (กันซ้ำแพตเทิร์น)
+    # karaoke: \kf กวาดจาก PrimaryColour → SecondaryColour → ตั้ง Primary = ฐาน 'ยังไม่พูด' (ขาว),
+    # Secondary = ไฮไลต์ 'พูดแล้ว' (สีสด) → คำเด้งเป็นสีสดตอนพูดแล้วค้างไว้ (สไตล์ TikTok)
     fsize = random.randint(82, 94)
-    colors = [
-        "&H00FFFFFF",  # ขาว
-        "&H00FFFFE0",  # เหลืองนวล
-        "&H00F5FFFA",  # เขียวมิ้นต์อ่อน
-        "&H00FFF0F5",  # ม่วงลาเวนเดอร์อ่อน
-        "&H00FFE4E1"   # ชมพูอ่อน
-    ]
-    pcolor = random.choice(colors)
+    hl = random.choice(_HL_COLORS)
+    base = random.choice(_BASE_COLORS)
     header = (
         f"[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 2\n\n"
-        f"[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, "
-        f"BackColour, Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV\n"
-        f"Style: Pop,Tahoma,{fsize},{pcolor},&H00141414,&H96000000,1,1,6,3,2,60,60,560\n\n"
+        f"[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        f"OutlineColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, "
+        f"MarginL, MarginR, MarginV, Encoding\n"
+        f"Style: Pop,Tahoma,{fsize},{base},{hl},&H00141414,&H96000000,1,0,1,6,3,2,60,60,560,1\n\n"
         f"[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
     body = ""
     for text, start, end in segs:
-        t = text.replace("\n", " ").replace("{", "(").replace("}", ")")
-        eff = r"{\fad(70,50)\fscx72\fscy72\t(0,140,\fscx107\fscy107)\t(140,230,\fscx100\fscy100)}"
-        body += f"Dialogue: 0,{_ass_t(start)},{_ass_t(end)},Pop,,0,0,0,,{eff}{t}\n"
+        dur_cs = max(1, int(round((end - start) * 100)))
+        kara = _kara_tokens(text, dur_cs)
+        if not kara:
+            continue
+        # ป็อปเข้า (scale bounce) + fade — แล้วให้ karaoke กวาดสีตลอดช่วงที่โชว์
+        eff = r"{\fad(70,50)\fscx78\fscy78\t(0,150,\fscx106\fscy106)\t(150,240,\fscx100\fscy100)}"
+        body += f"Dialogue: 0,{_ass_t(start)},{_ass_t(end)},Pop,,0,0,0,,{eff}{kara}\n"
     with open(out, "w", encoding="utf-8") as f:
         f.write(header + body)
     return out
 
 
+def _split_speakers(script: str):
+    """บทพอดแคสต์ 2 คน: ถ้า 'ทุกบรรทัด' ขึ้นต้นด้วย A:/B: (หรือ โฮสต์1/2, พิธีกร1/2) → คืน [(A|B, ข้อความ)],
+    ไม่งั้นคืน None (ใช้ทางเสียงเดียวปกติ — ไม่กระทบแนวอื่น)."""
+    import re as _re
+    raw = [l.strip() for l in _re.split(r"[\r\n]+", script or "") if l.strip()]
+    if len(raw) < 2:
+        return None
+    pat = _re.compile(r"^(?:host\s*)?([abAB])\s*[:：]\s*(.+)$|^(?:โฮสต์|พิธีกร)\s*([12])\s*[:：]\s*(.+)$")
+    out = []
+    for l in raw:
+        m = pat.match(l)
+        if not m:
+            return None
+        if m.group(1):
+            out.append((m.group(1).upper(), m.group(2)))
+        else:
+            out.append(("A" if m.group(3) == "1" else "B", m.group(4)))
+    return out or None
+
+
 def build_voice_captions(ff: str, script: str, voice: str | None):
-    """แยกพากย์ทีละบรรทัด → วัดเวลาจริง → คืน (ไฟล์เสียงรวม, ไฟล์ซับ ASS ที่ซิงค์)."""
+    """แยกพากย์ทีละบรรทัด → วัดเวลาจริง → คืน (ไฟล์เสียงรวม, ไฟล์ซับ ASS ที่ซิงค์).
+    ถ้าเป็นบทพอดแคสต์ (A:/B:) → สลับ 2 เสียง (หญิง/ชาย) ต่อผู้พูดอัตโนมัติ."""
     from . import voice_tts
     import re as _re
     # ตัด emoji ออกจากบทพากย์/ซับ — กัน TTS อ่านเพี้ยน (เช่น 🍜) + ซับไม่มี emoji รก
     script = _re.sub(r"[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF←-⇿⬀-⯿️]", "", script or "")
-    lines = _caption_lines(script)
-    if not lines:
+    # podcast 2 เสียง: บท A:/B: → สลับเสียงหญิง-ชายต่อผู้พูด (ตัดป้าย 'A:/B:' ออกจากซับ/เสียง)
+    pairs = _split_speakers(script)
+    if pairs:
+        va = voice or "th-TH-PremwadeeNeural"
+        vb = "th-TH-NiwatNeural" if va != "th-TH-NiwatNeural" else "th-TH-PremwadeeNeural"
+        voiced = [(ln, va if spk == "A" else vb) for spk, text in pairs for ln in _caption_lines(text)]
+    else:
+        voiced = [(ln, voice) for ln in _caption_lines(script)]
+    if not voiced:
         return None, None
     seg_files, segs, t = [], [], 0.0
-    for ln in lines:
-        mp3 = voice_tts.synth(ln, voice)
+    for ln, lnvoice in voiced:
+        mp3 = voice_tts.synth(ln, lnvoice)
         if not mp3:
             continue
         d = _duration(mp3)

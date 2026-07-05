@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     content_provider: str = "claude"
     anthropic_api_key: str = ""
     content_model: str = "claude-sonnet-4-6"
+    # CONTENT_STYLE: แนวคอนเทนต์ — realistic (อาหาร/สินค้าเหมือนจริง, ค่าเริ่มต้น) |
+    #   cartoon2d (การ์ตูน 2D) | pixar3d (Pixar 3D) | story (นิทานเล่าเรื่อง) | podcast (คุยกัน 2 เสียง)
+    content_style: str = "realistic"
 
     # Gemini media + (ตัวเลือก) เขียนข้อความฟรี
     gemini_api_key: str = ""
@@ -19,6 +22,14 @@ class Settings(BaseSettings):
     # VIDEO_MODE: image (ภาพนิ่ง) | ffmpeg (วีดีโอฟรีจากภาพ AI) | veo (วีดีโอจริง เสียเงิน)
     video_mode: str = "image"
     video_seconds: int = 6
+    # VIDEO_PROVIDER: เครื่องมือสร้าง 'วิดีโอจริง' —
+    #   "flow"     = Google Flow browser automation (ฟรี แต่เปราะ/มีโควตา/พึ่ง Chrome debug)
+    #   "veo"      = Veo API โดยตรง (เสถียร + เสียงพูด native ในคลิป, ต้องมีคีย์จริงขึ้นต้น AIzaSy)
+    #   "flow_veo" = ลอง Flow ก่อน ถ้าล้มเหลว/โควตาหมดค่อย fallback ไป Veo API
+    video_provider: str = "flow"
+    veo_aspect_ratio: str = "9:16"    # สัดส่วนคลิป Veo (รีล/Shorts = 9:16)
+    veo_poll_seconds: int = 10        # หน่วงต่อรอบ poll สถานะ Veo
+    veo_poll_max: int = 30            # จำนวนรอบ poll สูงสุด (10*30 ≈ 5 นาที)
     # POST_MONTAGE: true = โพสต์ 'คลิปรวม' (ต่อคลิปคนพูดหลายภาษาในร้านเดียว → ยาวขึ้น คงเสียงเดิม)
     post_montage: bool = True
     ffmpeg_path: str = ""            # เว้นว่าง = หาให้อัตโนมัติ
@@ -140,6 +151,11 @@ class Settings(BaseSettings):
     @property
     def has_gemini(self) -> bool:
         return bool(self.gemini_api_key)
+
+    @property
+    def has_veo(self) -> bool:
+        """มีคีย์ Google AI จริง (ขึ้นต้น AIzaSy) ที่เรียก Veo API ได้ — คีย์ Flow/mock จะไม่ผ่าน."""
+        return self.has_gemini and self.gemini_api_key.startswith("AIzaSy")
 
     @property
     def has_meta(self) -> bool:

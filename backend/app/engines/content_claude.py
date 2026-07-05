@@ -13,6 +13,62 @@ from ..config import settings
 # 4 platform × A/B = 8 variant ต่อร้าน
 PLATFORMS = ["facebook", "instagram", "youtube", "shopee_video"]
 
+# ---- style presets: แนวคอนเทนต์หลายแบบ (เลียนแบบบอทคู่แข่ง Prompt D Ai: ขายของ/การ์ตูน/Pixar/นิทาน/Podcast) ----
+# แต่ละแนว 'ทับ' เฉพาะสไตล์ภาพ/ผู้พูด/บท — คง hook + จิตวิทยาการขาย + โครง JSON เดิมไว้ทั้งหมด
+STYLE_PRESETS: dict[str, dict[str, str]] = {
+    "realistic": {"th": "ขายสินค้า/อาหารเหมือนจริง", "visual": "", "voice": "", "speaker": ""},
+    "cartoon2d": {
+        "th": "การ์ตูน 2D",
+        "visual": "flat 2D cartoon illustration, bold clean thick outlines, vibrant flat cel-shaded colors, "
+                  "a cute expressive mascot character holding/enjoying the product, playful sticker-like poster art, "
+                  "NO photorealism",
+        "voice": "โทนสนุกสดใสเป็นกันเอง เหมือนมาสคอตการ์ตูนพูด พลังงานสูง ยียวนน่ารัก",
+        "speaker": "a cute 2D cartoon mascot character speaking straight to camera",
+    },
+    "pixar3d": {
+        "th": "Pixar 3D",
+        "visual": "adorable 3D animated character in Pixar/Disney style, glossy soft global illumination, "
+                  "big expressive eyes, subsurface-scattering skin, cinematic shallow depth of field, "
+                  "stylized cute 3D render (Blender/Octane look), warmly presenting the product, NO photorealistic human",
+        "voice": "โทนอบอุ่นน่ารักมีเสน่ห์ เล่าแบบตัวการ์ตูน Pixar สดใสชวนยิ้ม",
+        "speaker": "a charming Pixar-style 3D animated character speaking to camera",
+    },
+    "story": {
+        "th": "นิทานเล่าเรื่อง",
+        "visual": "warm storybook illustration, soft watercolor / picture-book art style, whimsical gentle lighting, "
+                  "a narrative scene per shot (not a direct ad), cozy and heartwarming",
+        "voice": "voiceover_script = เล่าเป็นนิทานสั้นมีตัวละคร มีปม-คลี่คลาย ให้พระเอกคือร้าน/สินค้า "
+                 "เปิดแนว 'กาลครั้งหนึ่ง...' โทนบรรยายนุ่มชวนติดตาม ปิดด้วย CTA เนียนๆ",
+        "speaker": "a warm storybook narrator voiceover over the illustrated scenes (no on-camera speaker)",
+    },
+    "podcast": {
+        "th": "Podcast คุยกัน",
+        "visual": "cozy podcast studio scene, close-up microphone with warm bokeh, on-air neon sign, moody cinematic lighting",
+        "voice": "voiceover_script = บทสนทนา 2 คนสลับกัน (ขึ้นต้นบรรทัดด้วย 'A:' และ 'B:') คุยกันสบายๆ "
+                 "รีวิวร้าน/สินค้าแบบพอดแคสต์ มีถาม-ตอบ ปิดด้วยชวนไปลอง + ลิงก์",
+        "speaker": "two podcast hosts chatting (audio-led) over a static podcast-studio image",
+    },
+}
+
+
+def _style_block(style: str) -> str:
+    """คืน 'คำสั่งทับสไตล์' ต่อท้าย prompt — บังคับแนวภาพ/ผู้พูด/บทตาม preset.
+    realistic → คืน '' (ใช้สูตรเดิมใน SYSTEM ทั้งหมด ไม่กระทบพฤติกรรมเก่า)."""
+    p = STYLE_PRESETS.get(style)
+    if not p or style == "realistic":
+        return ""
+    return (
+        "\n\n★★ STYLE OVERRIDE (สำคัญสุด — ทับ 'สูตรภาพ/ผู้พูด' ในข้อ ⑨ ทั้งหมด) ★★\n"
+        f"แนวคอนเทนต์รอบนี้ = '{p['th']}'. คงกรอบ hook/จิตวิทยาการขาย/โครง JSON เดิมไว้ "
+        "แต่ 'เปลี่ยนสไตล์ภาพและผู้พูด' ตามนี้:\n"
+        f"• image_prompt & video_prompt (ภาษาอังกฤษ): {p['visual']}\n"
+        f"• โทน/บทพูด (voiceover_script, spoken_line): {p['voice']}\n"
+        f"• ยกเลิกข้อบังคับ 'realistic human actor / real person / no cartoons' ในข้อ ⑨ สำหรับแนวนี้ "
+        f"→ ผู้พูดใน video_prompt = {p['speaker']}. "
+        "คงข้อบังคับ 'no on-screen text, no subtitles' ไว้ (ซับ karaoke เติมทีหลัง), แนวตั้ง 9:16, "
+        "เว้นที่ว่างครึ่งบนสำหรับตัวหนังสือเสมอ."
+    )
+
 CONTENT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -193,7 +249,7 @@ def _store_facts(store: dict) -> str:
     return "\n".join(lines)
 
 
-def _prompt(store: dict, label: str) -> str:
+def _prompt(store: dict, label: str, style: str = "realistic") -> str:
     if label == "A":
         style_desc = (
             "สไตล์คอนเทนต์กลุ่ม A (สายคุ้ม/โปรโมชั่น/ตัวเลข):\n"
@@ -274,6 +330,7 @@ def _prompt(store: dict, label: str) -> str:
         f"6. spoken_line แต่ละ platform ต้องเปิดด้วย 'สูตร hook' คนละแบบดังนี้ (คำแรกสุดต้องโดนใน 1 วิ ห้ามขึ้นต้นซ้ำกัน): "
         f"facebook={hooks[0]} · instagram={hooks[1]} · youtube={hooks[2]}\n"
         f"7. ตอบกลับตามโครงสร้าง JSON_SKELETON ที่ระบุ"
+        + _style_block(style)
         + lang_note
         + _learned_guidance()
     )
@@ -389,12 +446,12 @@ def _strip_json(text: str) -> str:
     return t[s:e + 1] if s != -1 and e != -1 else t
 
 
-def _claude_generate(store: dict, label: str) -> tuple[dict, float]:
+def _claude_generate(store: dict, label: str, style: str = "realistic") -> tuple[dict, float]:
     """เขียนคอนเทนต์ด้วย Claude — ขอ JSON ผ่าน prompt แล้ว parse (รองรับ anthropic SDK 0.45)."""
     import anthropic
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     prompt = (
-        f"{_prompt(store, label)}\n\n"
+        f"{_prompt(store, label, style)}\n\n"
         f"ตอบกลับเป็น JSON เท่านั้น (ไม่มีข้อความอื่น ไม่มี markdown code fence) ตามโครงนี้เป๊ะ:\n{_JSON_SKELETON}"
     )
     resp = client.messages.create(
@@ -429,14 +486,14 @@ _JSON_SKELETON = (
 )
 
 
-def _gemini_generate(store: dict, label: str) -> tuple[dict, float]:
+def _gemini_generate(store: dict, label: str, style: str = "realistic") -> tuple[dict, float]:
     """เขียนคอนเทนต์ด้วย Gemini (free tier) — ออก JSON. ค่าใช้จ่าย ฿0 บน free tier."""
     from google import genai
     from google.genai import types
 
     client = genai.Client(api_key=settings.gemini_api_key)
     prompt = (
-        f"{SYSTEM}\n\n{_prompt(store, label)}\n\n"
+        f"{SYSTEM}\n\n{_prompt(store, label, style)}\n\n"
         f"ตอบกลับเป็น JSON เท่านั้น (ไม่มีข้อความอื่น ไม่มี markdown) ตามโครงนี้เป๊ะ:\n{_JSON_SKELETON}"
     )
     resp = client.models.generate_content(
@@ -448,29 +505,34 @@ def _gemini_generate(store: dict, label: str) -> tuple[dict, float]:
     return data, 0.0
 
 
-def generate_content(store: dict) -> tuple[dict, float]:
+def generate_content(store: dict, style: str | None = None) -> tuple[dict, float]:
     """คืน (ผลคอนเทนต์, ค่าใช้จ่ายโดยประมาณบาท). เลือก provider ตาม CONTENT_PROVIDER.
-    หากมีปัญหาเรื่องคีย์หรือโควตาหมด จะแสดงข้อผิดพลาดจริงให้ผู้ใช้เห็นทันที."""
+    style = แนวคอนเทนต์ (realistic/cartoon2d/pixar3d/story/podcast) — ไม่ระบุ → ใช้ store['content_style']
+    หรือ CONTENT_STYLE จาก .env. หากมีปัญหาเรื่องคีย์หรือโควตาหมด จะแสดงข้อผิดพลาดจริงให้ผู้ใช้เห็นทันที."""
     provider = settings.content_provider
+    style = style or store.get("content_style") or settings.content_style or "realistic"
+    if style not in STYLE_PRESETS:
+        print(f"[content] style '{style}' ไม่รู้จัก → ใช้ realistic")
+        style = "realistic"
     if provider == "gemini" and not settings.has_gemini:
         raise RuntimeError("ไม่มีการตั้งค่า GEMINI_API_KEY หรือรูปแบบคีย์ไม่ถูกต้อง")
     if provider == "claude" and not settings.has_claude:
         raise RuntimeError("ไม่มีการตั้งค่า ANTHROPIC_API_KEY หรือรูปแบบคีย์ไม่ถูกต้อง")
-        
+
     try:
         if provider == "gemini" and settings.has_gemini:
             # เจน A
-            data_A, cost_A = _gemini_generate(store, "A")
+            data_A, cost_A = _gemini_generate(store, "A", style)
             # เจน B
-            data_B, cost_B = _gemini_generate(store, "B")
+            data_B, cost_B = _gemini_generate(store, "B", style)
             # รวม
             data_A["variants"] = data_A.get("variants", []) + data_B.get("variants", [])
             return data_A, cost_A + cost_B
         if provider == "claude" and settings.has_claude:
             # เจน A
-            data_A, cost_A = _claude_generate(store, "A")
+            data_A, cost_A = _claude_generate(store, "A", style)
             # เจน B
-            data_B, cost_B = _claude_generate(store, "B")
+            data_B, cost_B = _claude_generate(store, "B", style)
             # รวม
             data_A["variants"] = data_A.get("variants", []) + data_B.get("variants", [])
             return data_A, cost_A + cost_B

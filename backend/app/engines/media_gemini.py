@@ -59,8 +59,82 @@ def generate_image(prompt: str) -> str:
         raise RuntimeError(f"ล้มเหลวในการสร้างรูปภาพผ่าน Gemini API: {e}")
 
 
+def _veo_image(image_path: str):
+    """แปลงไฟล์ภาพ → types.Image สำหรับ Veo image-to-video (รองรับ SDK หลายเวอร์ชัน)."""
+    from google.genai import types
+    with open(image_path, "rb") as f:
+        data = f.read()
+    ext = image_path.lower().rsplit(".", 1)[-1]
+    mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
+    try:
+        return types.Image(image_bytes=data, mime_type=mime)
+    except Exception:
+        # เผื่อ SDK เวอร์ชันที่ใช้ constructor คนละแบบ
+        return types.Image.from_file(location=image_path)
+
+
+def _veo_generate(prompt: str, image_path: str = "") -> str:
+    """สร้างวิดีโอจริงด้วย Veo API 'โดยตรง' — เสถียร ไม่พึ่ง browser + เสียงพูด native ในคลิป.
+
+    - มีรูปสินค้าจริง → image-to-video (คลิปตรงเมนูจริง = น่าเชื่อถือสุด)
+    - ไม่มีรูป → text-to-video
+    เขียนแบบทนเวอร์ชัน SDK: ถ้า generate_videos ไม่รับ arg (image/config) จะค่อยๆ ลดลง.
+    ต้องมีคีย์จริง (settings.has_veo). คืน path mp4 หรือ raise RuntimeError.
+    """
+    if not settings.has_veo:
+        raise RuntimeError("VIDEO_PROVIDER=veo ต้องใช้ Google AI API key จริง (ขึ้นต้น AIzaSy)")
+    client = _client()
+    has_img = bool(image_path and os.path.exists(image_path))
+
+    def _call(with_image: bool, with_cfg: bool):
+        kwargs: dict = {"model": settings.video_model, "prompt": prompt}
+        if with_cfg:
+            from google.genai import types
+            kwargs["config"] = types.GenerateVideosConfig(
+                aspect_ratio=settings.veo_aspect_ratio, number_of_videos=1)
+        if with_image:
+            kwargs["image"] = _veo_image(image_path)
+        return client.models.generate_videos(**kwargs)
+
+    # ไล่จาก 'ครบสุด' → 'ง่ายสุด': กัน SDK เวอร์ชันไม่รู้จัก arg / โมเดลไม่รองรับ image-to-video
+    attempts = ([(True, True), (True, False)] if has_img else []) + [(False, True), (False, False)]
+    op, last_err = None, None
+    for wi, wc in attempts:
+        try:
+            op = _call(wi, wc)
+            break
+        except TypeError as e:                 # SDK ไม่รู้จัก kwarg (image/config)
+            last_err = e
+            print(f"[veo] generate_videos ไม่รับ arg (image={wi},cfg={wc}) → ลองแบบง่ายลง: {str(e)[:80]}")
+        except Exception as e:                 # image-to-video อาจล้มกับบางโมเดล → ตกไป text-to-video
+            last_err = e
+            print(f"[veo] เรียกล้มเหลว (image={wi},cfg={wc}): {str(e)[:100]}")
+    if op is None:
+        raise RuntimeError(f"Veo API: เรียก generate_videos ไม่สำเร็จทุกรูปแบบ: {last_err}")
+
+    waited = 0
+    while not getattr(op, "done", False) and waited < settings.veo_poll_max:
+        time.sleep(settings.veo_poll_seconds)
+        op = client.operations.get(op)
+        waited += 1
+    if not getattr(op, "done", False):
+        raise RuntimeError("Veo API: สร้างวิดีโอไม่เสร็จในเวลาที่กำหนด (timeout)")
+
+    vids = getattr(getattr(op, "response", None), "generated_videos", None) or []
+    if not vids:
+        raise RuntimeError("Veo API: ไม่คืนวิดีโอ (อาจโดน safety filter หรือโควตาหมด)")
+    os.makedirs(settings.media_dir, exist_ok=True)
+    path = os.path.join(settings.media_dir, f"veo_{uuid.uuid4().hex[:8]}.mp4")
+    vid = vids[0]
+    client.files.download(file=vid.video)
+    vid.video.save(path)
+    if not (os.path.exists(path) and os.path.getsize(path) > 1000):
+        raise RuntimeError("Veo API: บันทึกไฟล์วิดีโอไม่สำเร็จ")
+    return path
+
+
 def generate_video(prompt: str, image_path: str = "") -> tuple[str, str]:
-    """สร้างวีดีโอสั้น 9:16 ด้วย Google Flow Browser Automation (ฟรี) โดยมี fallback ไปที่ Veo API.
+    """สร้างวีดีโอสั้น 9:16 — เลือก provider ได้ (VIDEO_PROVIDER): veo (เสถียร) / flow / flow_veo.
 
     image_path: ถ้ามีรูป product จริง → ทำ 'image-to-video' (วีดีโอตรงเมนูจริง) ก่อน,
     ทำไม่ได้ค่อย fallback ไป text-to-video แล้วค่อย Veo API.
@@ -69,15 +143,22 @@ def generate_video(prompt: str, image_path: str = "") -> tuple[str, str]:
     if not settings.enable_video:
         raise RuntimeError("ระบบสร้างวิดีโอถูกปิดอยู่ (ENABLE_VIDEO=false)")
 
-    # 0) ถ้า Flow ถูกพักอยู่ (เครดิตหมด) → ข้าม ไม่เสียเวลายิงซ้ำ
+    provider = (settings.video_provider or "flow").lower()
+    # === โหมด veo: เรียก Veo API โดยตรง (เสถียร + เสียงพูด native) ไม่พึ่ง browser ===
+    if provider == "veo":
+        return _veo_generate(prompt, image_path), "veo"
+
+    # 0) ถ้า Flow ถูกพักอยู่ (เครดิตหมด) → สลับไป Veo ถ้ามีคีย์จริง, ไม่มีก็หยุด (ไม่ยิงซ้ำเสียเวลา)
     try:
         from ..services import system_state
-        if system_state.flow_blocked():
-            raise RuntimeError("Google Flow โดนพักการใช้งานเนื่องจากตรวจพบว่าโควตาหมดในการรันก่อนหน้า")
-    except RuntimeError:
-        raise
+        blocked = system_state.flow_blocked()
     except Exception:
-        pass
+        blocked = False
+    if blocked:
+        if settings.has_veo:
+            print("[flow] ถูกพัก (เครดิตหมด) → สลับไปใช้ Veo API แทน")
+            return _veo_generate(prompt, image_path), "veo"
+        raise RuntimeError("Google Flow โดนพักการใช้งานเนื่องจากตรวจพบว่าโควตาหมดในการรันก่อนหน้า")
 
     # 1a) มีรูป product จริง → image-to-video ก่อน (วีดีโอตรงเมนูจริง = น่าเชื่อถือสุด)
     if image_path and os.path.exists(image_path):
@@ -95,26 +176,14 @@ def generate_video(prompt: str, image_path: str = "") -> tuple[str, str]:
         print(f"[flow-auto-fallback] Failed browser automation: {e}")
         print("[flow-auto-fallback] Attempting to fall back to Veo API...")
         
-        # 2) Fallback ไปที่ Veo API หากมีคีย์จริง (เริ่มด้วย AIzaSy)
-        if settings.has_gemini and settings.gemini_api_key.startswith("AIzaSy"):
+        # 2) Fallback ไปที่ Veo API (เสถียร + image-to-video) หากมีคีย์จริง (เริ่มด้วย AIzaSy)
+        if settings.has_veo:
             try:
-                client = _client()
-                op = client.models.generate_videos(model=settings.video_model, prompt=prompt)
-                for _ in range(30):                       # poll สูงสุด ~5 นาที
-                    if op.done:
-                        break
-                    time.sleep(10)
-                    op = client.operations.get(op)
-                vid = op.response.generated_videos[0]
-                os.makedirs(settings.media_dir, exist_ok=True)
-                path = os.path.join(settings.media_dir, f"veo_{uuid.uuid4().hex[:8]}.mp4")
-                client.files.download(file=vid.video)
-                vid.video.save(path)
-                return path, "veo"
+                return _veo_generate(prompt, image_path), "veo"
             except Exception as api_err:
                 print(f"[gemini] veo api error: {api_err}")
-                raise RuntimeError(f"การรันด้วย Veo API ล้มเหลว: {api_err}")
-        
+                raise RuntimeError(f"Flow ล้มเหลว ({e}) และ Veo API ก็ล้มเหลว: {api_err}")
+
         raise RuntimeError(f"การสร้างวิดีโอล้มเหลว: Google Flow ผิดพลาด ({e}) และคีย์ Veo API ไม่พร้อมใช้งาน")
 
 
