@@ -101,26 +101,41 @@ def generate_for_store(store_id: int) -> dict:
         except Exception as e:
             print(f"[product-img] {e}")
 
+        from concurrent.futures import ThreadPoolExecutor
+
         variants = data["variants"]
         total = len(variants) or 1
-        ok_count, fail_count = 0, 0
-        for i, v in enumerate(variants):
-            _prog(store_id, name, f"🎬 สร้างสื่อ {i + 1}/{total}", 18 + int(i / total * 64),
-                  detail=f"{v['platform']} · {v['label']}")
+        
+        def process_variant(v):
             try:
                 mtype, mpath, ipath, msource = _retry(
-                    lambda v=v: media_gemini.make_media(
+                    lambda: media_gemini.make_media(
                         v["image_prompt"], v["video_prompt"], v["hook"], v["voiceover_script"],
                         v["label"], product_image=product_img, spoken_line=v.get("spoken_line", "")),
                     tries=2, label=f"media {v['platform']}/{v['label']}")
-                ok_count += 1
+                return mtype, mpath, ipath, msource, None
             except Exception as e:
-                # variant นี้สร้างสื่อไม่สำเร็จ (ลองซ้ำแล้ว) → ข้ามสื่อ แต่ยังเก็บแคปชั่น/hook ไว้ (ไม่ทิ้งทั้งงาน)
+                return "none", "", "", "error", e
+
+        # Run concurrent generations using thread pool (Network I/O bound Gemini + Edge-TTS API calls)
+        _prog(store_id, name, "🎬 กำลังสร้างสื่อทุกช่องทางพร้อมกัน (Parallel Generation)", 30)
+        with ThreadPoolExecutor(max_workers=min(6, total)) as executor:
+            futures = [executor.submit(process_variant, v) for v in variants]
+            results = [f.result() for f in futures]
+
+        ok_count, fail_count = 0, 0
+        for i, (mtype, mpath, ipath, msource, err) in enumerate(results):
+            v = variants[i]
+            if err is not None:
                 fail_count += 1
-                print(f"[media] variant {i + 1}/{total} ({v['platform']}/{v['label']}) ล้มเหลวถาวร: {str(e)[:120]}")
+                print(f"[media] variant {i + 1}/{total} ({v['platform']}/{v['label']}) ล้มเหลวถาวร: {str(err)[:120]}")
                 _prog(store_id, name, f"⚠️ สื่อ {i + 1}/{total} ล้มเหลว — ข้าม (เก็บแคปชั่นไว้)",
-                      18 + int(i / total * 64), detail=f"{v['platform']} · {v['label']}")
-                mtype, mpath, ipath, msource = "none", "", "", "error"
+                      30 + int(i / total * 52), detail=f"{v['platform']} · {v['label']}")
+            else:
+                ok_count += 1
+                _prog(store_id, name, f"🎬 สร้างสื่อ {i + 1}/{total} สำเร็จ", 30 + int(i / total * 52),
+                      detail=f"{v['platform']} · {v['label']}")
+
             s.add(Variant(
                 content_job_id=job.id, store_id=store.id, label=v["label"],
                 platform=v["platform"], hook=v["hook"],

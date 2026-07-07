@@ -138,6 +138,44 @@ def scrape_now(keyword: str | None = None, limit: int | None = None, category: s
     return {"fetched": res["fetched"], "mode": res.get("mode"), "category": category, "error": None, **ing}
 
 
+# หมวดสินค้าครบทุกประเภทบน Shopee (คำค้น + tag หมวด) — ดึงทุกอย่างไม่ใช่แค่อาหาร
+_ALL_CATEGORY_KW = [
+    ("มือถือ สมาร์ทโฟน", "gadget"), ("หูฟัง ลำโพงบลูทูธ", "gadget"), ("โน้ตบุ๊ก คอมพิวเตอร์", "gadget"),
+    ("อุปกรณ์เสริมมือถือ", "gadget"), ("เสื้อผ้าผู้หญิง", "fashion"), ("เสื้อผ้าผู้ชาย", "fashion"),
+    ("รองเท้าผ้าใบ", "fashion"), ("กระเป๋า", "fashion"), ("นาฬิกา", "fashion"),
+    ("เครื่องสำอาง", "beauty"), ("สกินแคร์ บำรุงผิว", "beauty"), ("น้ำหอม", "beauty"),
+    ("ของใช้ในบ้าน", "home"), ("เครื่องครัว", "home"), ("เครื่องใช้ไฟฟ้า", "home"),
+    ("แม่และเด็ก ของเล่น", "baby"), ("อาหารเสริม วิตามิน", "health"), ("อุปกรณ์กีฬา", "sports"),
+    ("อะไหล่รถยนต์ มอเตอร์ไซค์", "auto"), ("อาหารแห้ง ขนม", "food"), ("เครื่องดื่ม กาแฟ", "food"),
+]
+
+
+@router.post("/scrape-all-categories")
+def scrape_all_categories(background: BackgroundTasks, per_keyword: int = 15):
+    """สแกนสินค้า Shopee 'ทุกหมวด' (มือถือ/แฟชั่น/ความงาม/บ้าน/แม่เด็ก/กีฬา/รถ/อาหาร...)
+    + สร้างลิงก์ affiliate Passio อัตโนมัติ (เบื้องหลัง). ⚠️ กินโควตา Apify — ปรับ per_keyword ได้."""
+    def _run():
+        import time as _t
+        added = 0
+        for kw, cat in _ALL_CATEGORY_KW:
+            try:
+                r = scrape_now(keyword=kw, limit=per_keyword, category=cat)
+                added += r.get("added", 0)
+                print(f"[scrape-all] {cat:8s} '{kw}': +{r.get('added', 0)} err={r.get('error')}")
+            except Exception as e:
+                print(f"[scrape-all] {kw} error: {e}")
+            _t.sleep(2)
+        try:
+            from .connectors import passio
+            print(f"[scrape-all] passio links: {passio.build_all(overwrite=False)}")
+        except Exception as e:
+            print(f"[scrape-all] passio error: {e}")
+        print(f"[scrape-all] DONE added={added}")
+    background.add_task(_run)
+    return {"status": "started", "categories": len(_ALL_CATEGORY_KW), "per_keyword": per_keyword,
+            "note": "สแกนทุกหมวด + สร้างลิงก์ Passio อัตโนมัติ (ดู log/แท็บร้านค้า) · ระวังโควตา Apify"}
+
+
 @router.get("/scrape/status")
 def scrape_status():
     return {"mode": settings.scraper_mode,
@@ -398,6 +436,93 @@ def system_autopilot(enable: bool, background_tasks: BackgroundTasks):
     return {"autopilot": st["autopilot"]}
 
 
+@router.get("/settings/ai-provider")
+def get_ai_provider():
+    """AI ที่ใช้เขียน prompt/คอนเทนต์ตอนนี้ + รายการที่พร้อมใช้ (มีคีย์)."""
+    from .services import runtime_state
+    cur = runtime_state.get("content_provider", settings.content_provider)
+    return {"provider": cur, "available": {
+        "claude": settings.has_claude,
+        "gemini": settings.has_gemini,
+        "chatgpt": settings.has_openai,
+    }}
+
+
+@router.post("/settings/ai-provider")
+def set_ai_provider(provider: str):
+    """เลือก AI เขียน prompt/คอนเทนต์ (claude | gemini | chatgpt) — มีผลทันที ไม่ต้องแก้ .env."""
+    from .services import runtime_state
+    if provider not in ("claude", "gemini", "chatgpt"):
+        raise HTTPException(400, "provider ต้องเป็น claude / gemini / chatgpt")
+    key_ok = {"claude": settings.has_claude, "gemini": settings.has_gemini,
+              "chatgpt": settings.has_openai}[provider]
+    if not key_ok:
+        need = {"claude": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY", "chatgpt": "OPENAI_API_KEY"}[provider]
+        raise HTTPException(400, f"ยังไม่มี {need} ใน .env — ใส่คีย์ก่อนถึงจะเลือก {provider} ได้")
+    runtime_state.set("content_provider", provider)
+    return {"ok": True, "provider": provider}
+
+
+@router.get("/settings/all")
+def get_settings_all():
+    """ดึงข้อมูลการตั้งค่า AI ทั้งหมด (ทั้งแบบ default และที่ override ไว้)."""
+    from .services import runtime_state
+    keys = [
+        "content_provider", "content_model", "openai_model", "gemini_text_model", "content_style", "content_extra",
+        "video_mode", "video_provider", "image_model", "video_model", "video_seconds",
+        "veo_aspect_ratio", "enable_video", "enable_voiceover", "enable_music", "tts_voice",
+        "music_volume", "asmr_volume", "stock_video", "stock_video_ratio", "post_montage",
+        "promo_mode", "promo_ai_mode", "promo_campaign", "repost_mode",
+        "anthropic_api_key", "gemini_api_key", "openai_api_key", "pexels_api_key", "freesound_api_key"
+    ]
+    
+    out = {}
+    for k in keys:
+        try:
+            default_val = super(settings.__class__, settings).__getattribute__(k)
+        except AttributeError:
+            default_val = None
+        active_val = getattr(settings, k, None)
+        out[k] = {
+            "value": active_val,
+            "default": default_val,
+            "overridden": runtime_state.get(k) is not None
+        }
+    return out
+
+
+@router.post("/settings/all")
+def set_settings_all(payload: dict):
+    """บันทึกข้อมูลการตั้งค่า AI หลายค่าพร้อมกันไปยัง runtime_state."""
+    from .services import runtime_state
+    for k, v in payload.items():
+        if v is None or v == "":
+            runtime_state.set(k, None)
+            continue
+        
+        try:
+            default_val = super(settings.__class__, settings).__getattribute__(k)
+        except AttributeError:
+            default_val = None
+            
+        if default_val is not None:
+            t = type(default_val)
+            if t == bool:
+                if isinstance(v, str):
+                    v = v.lower() in ("true", "1", "yes")
+                else:
+                    v = bool(v)
+            elif t == int:
+                v = int(v)
+            elif t == float:
+                v = float(v)
+            elif t == str:
+                v = str(v)
+                
+        runtime_state.set(k, v)
+    return {"ok": True}
+
+
 @router.post("/run-all")
 def run_all(background: BackgroundTasks, limit: int = 20):
     """ยิงครบวงทุกร้านสถานะ new. หากไม่มีร้านใหม่ จะทำการดึงข้อมูลร้านค้าจาก Shopee เข้ามาแบบ Auto"""
@@ -640,6 +765,62 @@ def run_promo(background: BackgroundTasks, n: int | None = None):
     from .services import repost
     background.add_task(repost.promo_round, n)
     return {"status": "started", "n": n or settings.repost_per_round}
+
+
+@router.post("/passio/build-links")
+def passio_build(overwrite: bool = True, with_sub: bool = False):
+    """สร้างลิงก์ affiliate Passio (goeco.mobi) ต่อร้านจาก shopee_url → เก็บลง affiliate_link ทุกร้าน.
+    ต่อสตริงล้วน เร็ว ไม่มี rate limit (ต้องตั้ง PASSIO_TOKEN ใน .env)."""
+    from .connectors import passio
+    if not passio.configured():
+        return {"error": "ยังไม่ได้ตั้งค่า PASSIO_TOKEN ใน .env"}
+    return passio.build_all(overwrite=overwrite, with_sub=with_sub)
+
+
+@router.post("/harvest/watch-clipboard")
+def harvest_watch(background: BackgroundTasks, minutes: float = 10.0, category: str = "EXTRACOMM"):
+    """โหมดกึ่งมือ: เฝ้า clipboard มือถือ — ผู้ใช้แตะแชร์+คัดลอกลิงก์สินค้า EXTRACOMM เอง บอทเก็บให้อัตโนมัติ.
+    เปิดแอป Shopee → Affiliate → ข้อเสนอ → แท็บ 'ค่าคอมพิเศษ' → แตะแชร์+คัดลอกทีละชิ้น (บอทเฝ้าให้)."""
+    from .connectors import shopee_food_harvester as H
+    background.add_task(H.watch_clipboard, category, minutes)
+    return {"status": "started", "minutes": minutes, "category": category,
+            "note": "แตะแชร์+คัดลอกลิงก์สินค้า EXTRACOMM ในแอปได้เลย บอทกำลังเฝ้า clipboard เก็บให้อัตโนมัติ"}
+
+
+@router.post("/products/import-all")
+def products_import_all(keyword: str = "", limit: int = 30, category: str = "สินค้า", save: bool = True):
+    """รวมสินค้าจากทุกเครือข่าย (Passio + AccessTrade + Involve) → dedupe → บันทึก. save=false=พรีวิว."""
+    from .services import product_importer
+    return product_importer.import_all(keyword=keyword, limit=limit, category=category, save=save)
+
+
+@router.post("/passio/import-products")
+def passio_import_products(keyword: str = "", limit: int = 30, page: int = 1,
+                           advertiser: str = "", category: str = "สินค้า", save: bool = True):
+    """ดึงสินค้าจาก Passio datafeed เข้าระบบ (พร้อม affiliate_link). save=false = พรีวิว.
+    ครอบทุก advertiser ที่ token เข้าถึงได้ (ตอนนี้ shopee.vn · เพิ่ม Shopee TH/Lazada เมื่อ Passio เปิดให้)."""
+    from .connectors import passio
+    if not passio.configured():
+        return {"error": "ยังไม่ได้ตั้งค่า PASSIO_TOKEN ใน .env"}
+    return passio.import_datafeed(keyword=keyword, limit=limit, page=page,
+                                  advertiser=advertiser, category=category, save=save)
+
+
+@router.get("/accesstrade/test")
+def accesstrade_test():
+    """ทดสอบการเชื่อม AccessTrade Deeplink API (ต้องตั้งค่า key/siteId/campaignId ใน .env ก่อน)."""
+    from .connectors import accesstrade
+    return accesstrade.test_connection()
+
+
+@router.post("/accesstrade/build-links")
+def accesstrade_build(background: BackgroundTasks, limit: int | None = None, overwrite: bool = False):
+    """สร้าง deeplink AccessTrade ต่อร้าน (จาก shopee_url) → เก็บลง affiliate_link ทุกร้าน (เบื้องหลัง)."""
+    from .connectors import accesstrade
+    if not accesstrade.configured():
+        return {"error": "ยังไม่ได้ตั้งค่า AccessTrade ใน .env (API key / siteId / campaignId)"}
+    background.add_task(accesstrade.build_all, limit, overwrite)
+    return {"status": "started", "note": "ดูผลที่ affiliate_link ของแต่ละร้าน / log"}
 
 
 @router.post("/promo/generate-all")

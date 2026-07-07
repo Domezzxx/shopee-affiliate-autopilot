@@ -42,6 +42,7 @@
     <button data-tab="insights">🧠 การเรียนรู้</button>
     <button data-tab="promo">🖼️ ภาพโปรโมท</button>
     <button data-tab="flowvids">🎬 วิดีโอ Flow</button>
+    <button data-tab="settings-ai">⚙️ ตั้งค่า AI</button>
     <button data-tab="flow">Flow ระบบ</button>
   </nav>
 
@@ -91,6 +92,446 @@
     <div class="panel hidden" id="tab-insights"></div>
     <div class="panel hidden" id="tab-promo"></div>
     <div class="panel hidden" id="tab-flowvids"></div>
+    <div class="panel hidden" id="tab-settings-ai">
+      <div class="split-layout">
+        <!-- LEFT COLUMN: Configurations -->
+        <div class="settings-form-column">
+          <!-- Wizard Mode Toggle -->
+          <div class="wizard-mode-toggle-wrap">
+            <span style="font-weight:600; display:flex; align-items:center; gap:8px;">
+              🪄 โหมดตั้งค่าแบบง่าย (Wizard Mode)
+              <span class="smart-helper-icon" data-tooltip="โหมดนำทางตั้งค่าหลักทีละขั้นตอน เหมาะสำหรับผู้เริ่มใช้งาน">i</span>
+            </span>
+            <label class="switch">
+              <input type="checkbox" id="toggle-wizard-mode" />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <!-- Quick Presets Bar (only when wizard mode is off) -->
+          <div class="presets-bar" id="presets-container">
+            <span class="presets-label">⚡ ดึงค่าด่วน (Presets):</span>
+            <button class="preset-chip" data-preset="restaurant">🍳 ร้านอาหาร</button>
+            <button class="preset-chip" data-preset="cafe">☕ คาเฟ่</button>
+            <button class="preset-chip" data-preset="bubbletea">🧋 ชานม</button>
+            <button class="preset-chip" data-preset="bakery">🍰 เบเกอรี่</button>
+            <button class="preset-chip" data-preset="grill">🥩 ปิ้งย่าง</button>
+            <button class="preset-chip" data-preset="clean">🥗 คลีนฟู้ด</button>
+            <button class="preset-chip" data-preset="japanese">🍣 อาหารญี่ปุ่น</button>
+            <button class="preset-chip" data-preset="gadget_it" style="border-color: var(--blue);">🛒 ร้านไอที/Gadget</button>
+            <button class="preset-chip" data-preset="gadget_home" style="border-color: var(--blue);">🏠 ของใช้ในบ้าน/DIY</button>
+          </div>
+
+          <!-- Wizard Container -->
+          <div class="wizard-stepper-wrap" id="wizard-stepper-wrap" style="display:none;">
+            <div class="wizard-stepper">
+              <div class="wizard-step-node active" data-step="1">1</div>
+              <div class="wizard-step-node" data-step="2">2</div>
+              <div class="wizard-step-node" data-step="3">3</div>
+              <div class="wizard-step-node" data-step="4">4</div>
+              <div class="wizard-step-node" data-step="5">5</div>
+            </div>
+            <div class="wizard-container">
+              <!-- Step 1: Category -->
+              <div class="wizard-pane active" data-step="1">
+                <h4 style="margin:0 0 4px; font-weight:600;">STEP 1: เลือกประเภทร้าน</h4>
+                <p class="muted" style="margin:0 0 16px; font-size:12px;">เลือกสไตล์หลักของร้าน เพื่อให้ AI แนะนำแนวบทพูดและรูปถ่ายให้อัตโนมัติ</p>
+                <div class="settings-group">
+                  <label for="w-preset-select">ประเภทร้านค้า:</label>
+                  <select id="w-preset-select" class="form-input">
+                    <option value="">-- เลือกประเภทร้าน --</option>
+                    <option value="restaurant">🍳 ร้านอาหารทั่วไป</option>
+                    <option value="cafe">☕ คาเฟ่ / กาแฟ</option>
+                    <option value="bubbletea">🧋 ชานมไข่มุก / น้ำหวาน</option>
+                    <option value="bakery">🍰 เบเกอรี่ / เค้ก</option>
+                    <option value="grill">🥩 ปิ้งย่าง / ชาบู</option>
+                    <option value="clean">🥗 อาหารคลีน / สุขภาพ</option>
+                    <option value="japanese">🍣 อาหารญี่ปุ่น / ซูชิ</option>
+                    <option value="gadget_it">🛒 ร้านไอที / อุปกรณ์ไอที (Gadget)</option>
+                    <option value="gadget_home">🏠 ของใช้ในบ้าน / อุปกรณ์ตกแต่ง (DIY)</option>
+                  </select>
+                </div>
+              </div>
+              <!-- Step 2: AI Provider -->
+              <div class="wizard-pane" data-step="2">
+                <h4 style="margin:0 0 4px; font-weight:600;">STEP 2: เลือก AI เขียนคอนเทนต์</h4>
+                <p class="muted" style="margin:0 0 16px; font-size:12px;">เลือกผู้ให้บริการ AI ในการสร้าง Prompt และแคปชั่นบทพูด</p>
+                <div class="settings-group">
+                  <label for="w-ai-provider">เลือก AI หลัก:</label>
+                  <select id="w-ai-provider">
+                    <option value="claude">🧠 Claude (Sonnet 3.5)</option>
+                    <option value="gemini">✨ Gemini (2.5 Flash - ฟรี)</option>
+                    <option value="chatgpt">🤖 ChatGPT (GPT-4o Mini)</option>
+                  </select>
+                </div>
+              </div>
+              <!-- Step 3: Video Mode -->
+              <div class="wizard-pane" data-step="3">
+                <h4 style="margin:0 0 4px; font-weight:600;">STEP 3: เลือกโหมดวิดีโอ</h4>
+                <p class="muted" style="margin:0 0 16px; font-size:12px;">ตั้งค่าว่าต้องการรูปนิ่งอย่างเดียว หรือวิดีโอเคลื่อนไหว</p>
+                <div class="settings-group">
+                  <label for="w-video-mode">โหมดวิดีโอ:</label>
+                  <select id="w-video-mode">
+                    <option value="image">🖼️ ภาพนิ่งอย่างเดียว</option>
+                    <option value="ffmpeg">🎥 ภาพเคลื่อนไหวจากภาพ AI (FFmpeg)</option>
+                    <option value="veo">🎬 วิดีโอจริงจาก Veo API (มีค่าใช้จ่าย)</option>
+                  </select>
+                </div>
+              </div>
+              <!-- Step 4: Voiceover -->
+              <div class="wizard-pane" data-step="4">
+                <h4 style="margin:0 0 4px; font-weight:600;">STEP 4: เสียงพากย์บรรยาย</h4>
+                <p class="muted" style="margin:0 0 16px; font-size:12px;">เลือกเปิด/ปิดเสียงพากย์ภาษาไทย และเลือกเสียงบรรยายหลัก</p>
+                <div class="settings-group row-layout">
+                  <label for="w-enable-voiceover">เปิดเสียงพากย์บรรยาย:</label>
+                  <label class="switch">
+                    <input type="checkbox" id="w-enable-voiceover" checked />
+                    <span class="slider"></span>
+                  </label>
+                </div>
+                <div class="settings-group">
+                  <label for="w-tts-voice">เลือกเสียงพากย์:</label>
+                  <select id="w-tts-voice">
+                    <option value="th-TH-PremwadeeNeural">👩 th-TH-PremwadeeNeural (เสียงผู้หญิง)</option>
+                    <option value="th-TH-NiwatNeural">👨 th-TH-NiwatNeural (เสียงผู้ชาย)</option>
+                  </select>
+                </div>
+              </div>
+              <!-- Step 5: Finish -->
+              <div class="wizard-pane" data-step="5">
+                <h4 style="margin:0 0 4px; font-weight:600;">STEP 5: ตรวจสอบและบันทึก</h4>
+                <p class="muted" style="margin:0 0 16px; font-size:12px;">ตรวจสอบความคุ้นเคยของสื่อได้ที่แถบ Live Preview ขวา</p>
+                <div class="api-empty-state" style="border-color: var(--accent2); background: rgba(16, 185, 129, 0.05);">
+                  <p style="color: var(--txt); font-weight: 600;">✨ พร้อมดำเนินการตั้งค่าทันที</p>
+                </div>
+              </div>
+              <div class="wizard-nav">
+                <button type="button" id="wizard-btn-prev" class="go" style="display:none;">⬅️ ย้อนกลับ</button>
+                <div style="flex-grow: 1;"></div>
+                <button type="button" id="wizard-btn-next" class="primary">ถัดไป ➡️</button>
+                <button type="button" id="wizard-btn-finish" class="primary" style="display:none;">💾 บันทึกตั้งค่า</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Classic Form Panel Container -->
+          <div class="classic-form-wrap" id="classic-form-wrap">
+            <div class="settings-grid">
+              <!-- Basic Settings Card (Always visible) -->
+              <div class="settings-card card-ai">
+                <h3>✍️ การตั้งค่า AI และสไตล์หลัก (Basic Settings)</h3>
+                
+                <div class="settings-group">
+                  <label for="ai-provider">
+                    AI หลักเขียนข้อความ
+                    <span class="smart-helper-icon" data-tooltip="เลือกโมเดล AI ในการวิเคราะห์ร้านอาหารและสร้างแคปชั่นสคริปต์">i</span>
+                  </label>
+                  <select id="ai-provider" class="form-input">
+                    <option value="claude">🧠 Claude</option>
+                    <option value="gemini">✨ Gemini</option>
+                    <option value="chatgpt">🤖 ChatGPT</option>
+                  </select>
+                </div>
+
+                <div class="settings-group">
+                  <label for="s-content-style">
+                    แนวการเขียนคอนเทนต์ (Content Style)
+                    <span class="smart-helper-icon" data-tooltip="กำหนดโทน/อารมณ์ และลักษณะสไตล์รูปถ่ายของร้าน">i</span>
+                  </label>
+                  <select id="s-content-style" class="form-input">
+                    <option value="realistic">🍛 อาหารจริง/สมจริง (realistic)</option>
+                    <option value="cartoon2d">🎨 การ์ตูน 2D (cartoon2d)</option>
+                    <option value="pixar3d">🧸 Pixar 3D (pixar3d)</option>
+                    <option value="story">📖 นิทานเล่าเรื่อง (story)</option>
+                    <option value="podcast">🎙️ พอดแคสต์คุยกัน 2 เสียง (podcast)</option>
+                  </select>
+                </div>
+
+                <div class="settings-group">
+                  <label for="s-content-extra">
+                    📝 คำสั่งพิเศษถึง AI (พิมพ์แนวเอง)
+                    <span class="smart-helper-icon" data-tooltip="พิมพ์คำสั่ง/แนวที่ต้องการ จะถูกส่งเข้า AI ทุกครั้งที่เขียนคอนเทนต์ เช่น เน้นแซ่บอีสาน ใช้คำว่าแซ่บ ห้ามอิโมจิเยอะ ราคาต้องเด่น">i</span>
+                  </label>
+                  <textarea id="s-content-extra" class="form-input" rows="3"
+                    placeholder="เช่น เน้นสำเนียงอีสานจัดจ้าน ใช้คำว่า 'แซ่บ' 'เด้อ' · ราคาต้องเด่น · ห้ามใช้อิโมจิเกิน 2 ตัว · เขียนให้เหมือนรีวิวจริง"
+                    style="resize:vertical; min-height:70px; font-family:inherit;"></textarea>
+                </div>
+
+                <div class="settings-group">
+                  <label for="s-video-mode">
+                    โหมดการสร้างวิดีโอ (Video Mode)
+                    <span class="smart-helper-icon" data-tooltip="กำหนดรูปแบบสื่อ: เฉพาะรูปภาพ หรือสั่นไหวสร้างวิดีโอเคลื่อนไหว">i</span>
+                  </label>
+                  <select id="s-video-mode" class="form-input">
+                    <option value="image">🖼️ ภาพนิ่งอย่างเดียว</option>
+                    <option value="ffmpeg">🎥 ภาพเคลื่อนไหวจากภาพ AI (FFmpeg)</option>
+                    <option value="veo">🎬 วิดีโอจริงจาก Veo API (มีค่าใช้จ่าย)</option>
+                  </select>
+                </div>
+
+                <div class="settings-group row-layout">
+                  <label for="s-enable-voiceover">
+                    เปิดใช้งานเสียงพากย์บรรยาย (Voiceover)
+                    <span class="smart-helper-icon" data-tooltip="เปิดระบบแปลงข้อความเป็นเสียงพูดภาษาไทยประกอบคลิป">i</span>
+                  </label>
+                  <label class="switch">
+                    <input type="checkbox" id="s-enable-voiceover" />
+                    <span class="slider"></span>
+                  </label>
+                </div>
+
+                <div class="settings-group row-layout">
+                  <label for="s-promo-mode">
+                    เปิดโหมดสร้างภาพโปรโมท (Promo Poster)
+                    <span class="smart-helper-icon" data-tooltip="สร้างโปสเตอร์โฆษณานิ่ง (ฟรี) แทนการสร้างคลิปวิดีโอ">i</span>
+                  </label>
+                  <label class="switch">
+                    <input type="checkbox" id="s-promo-mode" />
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Advanced Settings Accordion -->
+              <div class="accordion" id="advanced-accordion">
+                <div class="accordion-header">⚙️ ตั้งค่าระดับลึก (Advanced Settings)</div>
+                <div class="accordion-body">
+                  
+                  <div class="settings-group" id="group-content-model">
+                    <label for="s-content-model">Claude Model</label>
+                    <input type="text" id="s-content-model" placeholder="เช่น claude-3-5-sonnet" />
+                  </div>
+
+                  <div class="settings-group" id="group-openai-model">
+                    <label for="s-openai-model">ChatGPT Model</label>
+                    <input type="text" id="s-openai-model" placeholder="เช่น gpt-4o-mini" />
+                  </div>
+
+                  <div class="settings-group" id="group-gemini-text-model">
+                    <label for="s-gemini-text-model">Gemini Model</label>
+                    <input type="text" id="s-gemini-text-model" placeholder="เช่น gemini-2.5-flash" />
+                  </div>
+
+                  <div class="settings-group" id="group-video-provider">
+                    <label for="s-video-provider">ผู้ให้บริการคลิปวิดีโอ (Video Provider)</label>
+                    <select id="s-video-provider">
+                      <option value="flow">🌐 Google Flow Automation (ฟรี)</option>
+                      <option value="veo">✨ Veo API โดยตรง</option>
+                      <option value="flow_veo">⚡ Flow ก่อน แล้วค่อย Veo</option>
+                    </select>
+                  </div>
+
+                  <div class="settings-group" id="group-image-model">
+                    <label for="s-image-model">โมเดลรูปภาพ (Image Model)</label>
+                    <input type="text" id="s-image-model" placeholder="เช่น gemini-2.5-flash-image" />
+                  </div>
+
+                  <div class="settings-group" id="group-video-model">
+                    <label for="s-video-model">โมเดลวิดีโอ (Video Model)</label>
+                    <input type="text" id="s-video-model" placeholder="เช่น veo-3.0-generate-001" />
+                  </div>
+
+                  <div class="settings-group" id="group-video-seconds">
+                    <label for="s-video-seconds">
+                      ความยาววิดีโอ
+                      <span class="recommended-badge">แนะนำ: 6 วินาที</span>
+                    </label>
+                    <input type="number" id="s-video-seconds" placeholder="6" min="1" max="60" />
+                  </div>
+
+                  <div class="settings-group" id="group-veo-aspect-ratio">
+                    <label for="s-veo-aspect-ratio">สัดส่วนวิดีโอ (Aspect Ratio)</label>
+                    <input type="text" id="s-veo-aspect-ratio" placeholder="9:16" />
+                  </div>
+
+                  <div class="settings-group" id="group-tts-voice">
+                    <label for="s-tts-voice">เสียงพากย์บรรยาย (TTS Voice)</label>
+                    <select id="s-tts-voice">
+                      <option value="th-TH-PremwadeeNeural">👩 th-TH-PremwadeeNeural (หญิง)</option>
+                      <option value="th-TH-NiwatNeural">👨 th-TH-NiwatNeural (ชาย)</option>
+                    </select>
+                  </div>
+
+                  <div class="settings-group row-layout" id="group-enable-music">
+                    <label for="s-enable-music">เปิดเสียงเพลงบรรเลงประกอบ</label>
+                    <label class="switch">
+                      <input type="checkbox" id="s-enable-music" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="settings-group" id="group-music-volume">
+                    <label for="s-music-volume">
+                      ความดังเพลงคลอ
+                      <span class="recommended-badge">แนะนำ: 0.15</span>
+                    </label>
+                    <input type="number" id="s-music-volume" step="0.01" min="0" max="1" placeholder="0.16" />
+                  </div>
+
+                  <div class="settings-group" id="group-asmr-volume">
+                    <label for="s-asmr-volume">
+                      ความดังเสียง ASMR / บรรยากาศ
+                      <span class="recommended-badge">แนะนำ: 0.10</span>
+                    </label>
+                    <input type="number" id="s-asmr-volume" step="0.01" min="0" max="1" placeholder="0.13" />
+                  </div>
+
+                  <div class="settings-group" id="group-stock-video-ratio">
+                    <label for="s-stock-video-ratio">อัตราส่วน footage จริง : ภาพ AI</label>
+                    <input type="number" id="s-stock-video-ratio" placeholder="2" />
+                  </div>
+
+                  <div class="settings-group row-layout" id="group-post-montage">
+                    <label for="s-post-montage">โพสต์คลิปรวมต่อร้าน (Post Montage)</label>
+                    <label class="switch">
+                      <input type="checkbox" id="s-post-montage" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="settings-group row-layout" id="group-enable-video">
+                    <label for="s-enable-video">เปิดระบบวิดีโอ (Enable Video)</label>
+                    <label class="switch">
+                      <input type="checkbox" id="s-enable-video" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="settings-group row-layout" id="group-stock-video">
+                    <label for="s-stock-video">เปิดการสอดแทรกฟุตเทจอาหารจริง</label>
+                    <label class="switch">
+                      <input type="checkbox" id="s-stock-video" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="settings-group" id="group-promo-ai-mode">
+                    <label for="s-promo-ai-mode">สไตล์รูป AI โปสเตอร์โปรโมท</label>
+                    <select id="s-promo-ai-mode">
+                      <option value="photo">📸 ภาพอาหารจริง (photo)</option>
+                      <option value="cartoon">🎨 ภาพการ์ตูนสดใส (cartoon)</option>
+                      <option value="mix">🌀 แบบผสมผสาน (mix)</option>
+                    </select>
+                  </div>
+
+                  <div class="settings-group" id="group-promo-campaign">
+                    <label for="s-promo-campaign">ข้อความป้ายบนโปสเตอร์</label>
+                    <input type="text" id="s-promo-campaign" placeholder="เช่น อร่อยซ่าท้าให้ลอง หรือเว้นว่าง" />
+                  </div>
+
+                  <div class="settings-group row-layout" id="group-repost-mode">
+                    <label for="s-repost-mode">เปิดโหมดโพสต์ซ้ำคลิปเก่า (Repost)</label>
+                    <label class="switch">
+                      <input type="checkbox" id="s-repost-mode" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                </div>
+              </div>
+
+              <!-- API Management Accordion -->
+              <div class="accordion" id="api-accordion">
+                <div class="accordion-header">🔑 การจัดการคีย์เชื่อมต่อ (API Keys Management)</div>
+                <div class="accordion-body">
+                  <!-- OpenAI Key -->
+                  <div class="settings-group" id="api-wrap-openai">
+                    <label for="s-openai-api-key">OpenAI API Key (ChatGPT)</label>
+                    <div class="api-connect-container" id="api-connect-openai">
+                      <!-- Rendered by JS dynamically (Input or Connect Button) -->
+                    </div>
+                  </div>
+
+                  <!-- Gemini Key -->
+                  <div class="settings-group" id="api-wrap-gemini">
+                    <label for="s-gemini-api-key">Gemini API Key</label>
+                    <div class="api-connect-container" id="api-connect-gemini">
+                      <!-- Rendered by JS dynamically -->
+                    </div>
+                  </div>
+
+                  <!-- Claude Key -->
+                  <div class="settings-group" id="api-wrap-anthropic">
+                    <label for="s-anthropic-api-key">Claude API Key (Anthropic)</label>
+                    <div class="api-connect-container" id="api-connect-anthropic">
+                      <!-- Rendered by JS dynamically -->
+                    </div>
+                  </div>
+
+                  <!-- Pexels Key -->
+                  <div class="settings-group" id="api-wrap-pexels">
+                    <label for="s-pexels-api-key">Pexels API Key (Footage)</label>
+                    <div class="api-connect-container" id="api-connect-pexels">
+                      <!-- Rendered by JS dynamically -->
+                    </div>
+                  </div>
+
+                  <!-- Freesound Key -->
+                  <div class="settings-group" id="api-wrap-freesound">
+                    <label for="s-freesound-api-key">Freesound API Key (ASMR)</label>
+                    <div class="api-connect-container" id="api-connect-freesound">
+                      <!-- Rendered by JS dynamically -->
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Save Settings Footer -->
+            <div class="settings-footer">
+              <button id="btn-save-settings" class="primary" style="padding: 10px 24px; font-size: 14px;">💾 บันทึกการตั้งค่า</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN: Real-Time Live Preview Mock -->
+        <div class="preview-sticky">
+          <div class="live-preview-card">
+            <h3>📱 จำลองผลลัพธ์จริง (Live Preview) <span class="preview-status-indicator"></span></h3>
+            
+            <div class="preview-container">
+              <!-- Video / Image Screen -->
+              <div class="preview-media-mock">
+                <span class="preview-platform-tag" id="preview-platform-tag">Reels / Shorts</span>
+                <span class="preview-seconds-badge" id="preview-seconds-badge">6 วินาที</span>
+                
+                <div class="preview-video-visual" id="preview-video-visual">
+                  🍛 [ ภาพจำลองถ่ายซูมจานอาหารสมจริง ]
+                </div>
+              </div>
+
+              <!-- Meta and caption info -->
+              <div class="preview-text-content">
+                <h5 class="preview-caption-title" id="preview-caption-title">ชื่อวิดีโอจะถูกสรุปที่นี่</h5>
+                <p class="preview-hook-text" id="preview-hook-text">แคปชั่นและคำเปิดวิดีโอ (Hook) จะดึงข้อมูลจากแนวเขียนของสไตล์หลักที่คุณเลือกโดยอัตโนมัติ...</p>
+              </div>
+
+              <!-- Audio sound bar representation -->
+              <div class="preview-audio-track" id="preview-audio-track">
+                <div class="preview-audio-header">
+                  <span id="preview-audio-voice">🎙️ edge-tts: NiwatNeural (ชาย)</span>
+                  <span id="preview-audio-music">🎵 เพลงประกอบ (16%)</span>
+                </div>
+                <div class="preview-audio-bar">
+                  <div class="preview-audio-fill" id="preview-audio-fill"></div>
+                </div>
+              </div>
+
+              <!-- Call to action button simulator -->
+              <div class="preview-cta-btn" id="preview-cta-btn">
+                🛒 คลิกตะกร้าใต้คอมเมนต์แรก สั่งเลย!
+              </div>
+
+              <!-- Comment link mock -->
+              <div class="preview-first-comment" id="preview-first-comment">
+                💬 คอมเมนต์แรก (แบรนด์จะวางลิงก์อัตโนมัติ):<br>
+                <span style="color:var(--accent2)">https://shope.ee/... (ลิงก์นายหน้า)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="panel hidden" id="tab-flow"></div>
   </main>
 

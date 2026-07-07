@@ -153,6 +153,22 @@ $("#btn-system").onclick = async () => {
   } catch (e) { toast(e.message, true); }
 };
 
+// ---------------- AI provider (เลือก Claude / Gemini / ChatGPT เขียน prompt & คอนเทนต์)
+async function initAiProvider() {
+  const sel = $("#ai-provider");
+  if (!sel) return;
+  try {
+    const r = await api("/settings/ai-provider");
+    [...sel.options].forEach(o => {
+      const ok = r.available?.[o.value];
+      o.disabled = !ok;
+      o.textContent = o.textContent.replace(/ \(ไม่มีคีย์\)$/, "") + (ok ? "" : " (ไม่มีคีย์)");
+    });
+    sel.value = r.provider;
+  } catch (e) {}
+}
+initAiProvider();
+
 // ---------------- banner (real vs mock)
 async function loadBanner() {
   const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.startsWith("192.168.");
@@ -664,11 +680,547 @@ async function renderPromo() {
     : '<p class="muted">ยังไม่มีภาพ — กด "สร้างภาพทุกร้าน"</p>');
 }
 
+// ---------------- ตั้งค่า AI
+// ---------------- ตั้งค่า AI
+let settingsLoading = false;
+
+// Global helpers for API connection UI connected to window
+window.showApiKeyInput = (id) => {
+  const emptyState = document.getElementById(`empty-state-${id}`);
+  const inputContainer = document.getElementById(`input-container-${id}`);
+  if (emptyState) emptyState.style.display = "none";
+  if (inputContainer) inputContainer.style.display = "block";
+};
+
+window.clearApiKeyField = async (id) => {
+  if (!confirm("คุณต้องการยกเลิกการเชื่อมต่อและลบคีย์นี้ออกจากระบบหรือไม่?")) return;
+  const keyMap = {
+    "s-anthropic-api-key": "anthropic_api_key",
+    "s-openai-api-key": "openai_api_key",
+    "s-gemini-api-key": "gemini_api_key",
+    "s-pexels-api-key": "pexels_api_key",
+    "s-freesound-api-key": "freesound_api_key"
+  };
+  const key = keyMap[id];
+  try {
+    toast("กำลังลบคีย์...");
+    await api("/settings/all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [key]: "" })
+    });
+    toast("ลบคีย์สำเร็จแล้ว!");
+    renderSettingsAi();
+  } catch (e) {
+    toast(e.message, true);
+  }
+};
+
+async function renderSettingsAi() {
+  const panel = $("#tab-settings-ai");
+  if (settingsLoading) return;
+  settingsLoading = true;
+  panel.style.opacity = "0.6";
+  try {
+    const config = await api("/settings/all");
+    
+    const textAndSelectKeys = {
+      "ai-provider": "content_provider",
+      "s-content-style": "content_style",
+      "s-content-extra": "content_extra",
+      "s-content-model": "content_model",
+      "s-openai-model": "openai_model",
+      "s-gemini-text-model": "gemini_text_model",
+      "s-image-model": "image_model",
+      "s-video-model": "video_model",
+      "s-video-seconds": "video_seconds",
+      "s-veo-aspect-ratio": "veo_aspect_ratio",
+      "s-tts-voice": "tts_voice",
+      "s-music-volume": "music_volume",
+      "s-asmr-volume": "asmr_volume",
+      "s-stock-video-ratio": "stock_video_ratio",
+      "s-promo-ai-mode": "promo_ai_mode",
+      "s-promo-campaign": "promo_campaign"
+    };
+
+    const checkboxKeys = {
+      "s-enable-voiceover": "enable_voiceover",
+      "s-enable-music": "enable_music",
+      "s-post-montage": "post_montage",
+      "s-enable-video": "enable_video",
+      "s-stock-video": "stock_video",
+      "s-promo-mode": "promo_mode",
+      "s-repost-mode": "repost_mode"
+    };
+
+    const passwordKeys = {
+      "s-anthropic-api-key": "anthropic_api_key",
+      "s-openai-api-key": "openai_api_key",
+      "s-gemini-api-key": "gemini_api_key",
+      "s-pexels-api-key": "pexels_api_key",
+      "s-freesound-api-key": "freesound_api_key"
+    };
+
+    // Populate normal inputs and selects
+    for (const [id, key] of Object.entries(textAndSelectKeys)) {
+      const el = $(`#${id}`);
+      if (el && config[key]) {
+        el.value = config[key].value ?? "";
+        if (config[key].overridden) {
+          el.style.borderColor = "var(--accent2)";
+          el.title = `ค่าเดิมใน .env: ${config[key].default}`;
+        } else {
+          el.style.borderColor = "";
+          el.title = `ค่าดั้งเดิมจาก .env`;
+        }
+      }
+    }
+
+    // Populate checkboxes (Toggles)
+    for (const [id, key] of Object.entries(checkboxKeys)) {
+      const el = $(`#${id}`);
+      if (el && config[key]) {
+        el.checked = !!config[key].value;
+        if (config[key].overridden) {
+          el.parentElement.style.color = "var(--accent2)";
+        } else {
+          el.parentElement.style.color = "";
+        }
+      }
+    }
+
+    // Populate password / connect keys dynamically (Vercel Connect empty states)
+    const providerNames = {
+      "s-anthropic-api-key": "Claude (Anthropic)",
+      "s-openai-api-key": "OpenAI (ChatGPT)",
+      "s-gemini-api-key": "Gemini AI",
+      "s-pexels-api-key": "Pexels (Footage)",
+      "s-freesound-api-key": "Freesound (ASMR)"
+    };
+
+    for (const [id, key] of Object.entries(passwordKeys)) {
+      const wrapper = $(`#api-connect-${id.replace("s-", "").replace("-api-key", "")}`);
+      if (wrapper && config[key]) {
+        const providerName = providerNames[id];
+        if (config[key].value) {
+          // Key exists -> Show masked input + disconnect button
+          wrapper.innerHTML = `
+            <div style="display:flex; gap:8px; width:100%;">
+              <input type="password" id="${id}" class="form-input" style="flex:1;" placeholder="●●●●●●●● (เชื่อมต่อแล้ว)" />
+              <button type="button" class="go" onclick="window.clearApiKeyField('${id}')" style="color:#ef4444; border-color:rgba(239,68,68,0.2);">Disconnect</button>
+            </div>
+          `;
+        } else {
+          // No Key -> Empty State button
+          wrapper.innerHTML = `
+            <div class="api-empty-state" id="empty-state-${id}">
+              <p>ยังไม่ได้เชื่อมต่อบัญชี ${providerName}</p>
+              <button type="button" class="primary" onclick="window.showApiKeyInput('${id}')">Connect ${providerName}</button>
+            </div>
+            <div id="input-container-${id}" style="display:none; width:100%;">
+              <input type="password" id="${id}" class="form-input" placeholder="ใส่ API Key ${providerName} ที่นี่..." style="width:100%;" />
+            </div>
+          `;
+        }
+      }
+    }
+
+    // 1. Accordions Logic
+    document.querySelectorAll(".accordion-header").forEach(header => {
+      header.onclick = () => {
+        const accordion = header.parentElement;
+        accordion.classList.toggle("open");
+      };
+    });
+
+    // 2. Progressive Disclosure Logic
+    const updateDisclosure = () => {
+      const enableVoice = $("#s-enable-voiceover")?.checked;
+      const videoMode = $("#s-video-mode")?.value;
+      const promoMode = $("#s-promo-mode")?.checked;
+
+      // Voice triggers
+      const voiceDeps = ["#group-tts-voice", "#group-enable-music", "#group-music-volume", "#group-asmr-volume"];
+      voiceDeps.forEach(sel => {
+        const el = $(sel);
+        if (el) {
+          if (enableVoice) el.classList.remove("disclosure-hidden");
+          else el.classList.add("disclosure-hidden");
+        }
+      });
+
+      // Video triggers
+      const videoDeps = ["#group-video-provider", "#group-video-model", "#group-video-seconds", "#group-veo-aspect-ratio", "#group-stock-video", "#group-stock-video-ratio"];
+      videoDeps.forEach(sel => {
+        const el = $(sel);
+        if (el) {
+          if (videoMode === "image") el.classList.add("disclosure-hidden");
+          else el.classList.remove("disclosure-hidden");
+        }
+      });
+
+      // Promo triggers
+      const promoDeps = ["#group-promo-ai-mode", "#group-promo-campaign"];
+      promoDeps.forEach(sel => {
+        const el = $(sel);
+        if (el) {
+          if (promoMode) el.classList.remove("disclosure-hidden");
+          else el.classList.add("disclosure-hidden");
+        }
+      });
+    };
+
+    // Listen to changes for disclosure
+    $("#s-enable-voiceover").onchange = updateDisclosure;
+    $("#s-video-mode").onchange = updateDisclosure;
+    $("#s-promo-mode").onchange = updateDisclosure;
+    updateDisclosure();
+
+    // 3. Validation Logic
+    const validateField = (el, isValid, warningMsg = "", errorMsg = "") => {
+      const group = el.parentElement;
+      if (!group) return;
+      group.classList.remove("val-error", "val-warning", "val-success");
+      
+      let msgEl = group.querySelector(".validation-message");
+      if (!msgEl) {
+        msgEl = document.createElement("div");
+        msgEl.className = "validation-message";
+        group.appendChild(msgEl);
+      }
+
+      if (!isValid) {
+        group.classList.add("val-error");
+        msgEl.textContent = errorMsg;
+      } else if (warningMsg) {
+        group.classList.add("val-warning");
+        msgEl.textContent = warningMsg;
+      } else {
+        group.classList.add("val-success");
+        msgEl.textContent = "ตรวจสอบถูกต้อง";
+      }
+    };
+
+    // Add event listeners for validation on input blur/change
+    const secondsInput = $("#s-video-seconds");
+    if (secondsInput) {
+      secondsInput.oninput = () => {
+        const val = parseInt(secondsInput.value);
+        const isValid = !isNaN(val) && val >= 1 && val <= 60;
+        validateField(secondsInput, isValid, "", "ความยาววิดีโอต้องอยู่ระหว่าง 1 - 60 วินาที");
+      };
+    }
+
+    const musicVolInput = $("#s-music-volume");
+    if (musicVolInput) {
+      musicVolInput.oninput = () => {
+        const val = parseFloat(musicVolInput.value);
+        const isValid = !isNaN(val) && val >= 0 && val <= 1;
+        validateField(musicVolInput, isValid, "", "ระดับเสียงเพลงต้องเป็นทศนิยมระหว่าง 0.0 - 1.0");
+      };
+    }
+
+    // 4. Real-Time Live Preview Sync
+    const updatePreview = () => {
+      const style = $("#s-content-style").value;
+      const voice = $("#s-tts-voice").value;
+      const musicVol = parseFloat($("#s-music-volume").value || 0.16);
+      const isMusic = $("#s-enable-music").checked;
+      const isVoice = $("#s-enable-voiceover").checked;
+      const seconds = $("#s-video-seconds").value || 6;
+      const mode = $("#s-video-mode").value;
+      const promoCampaign = $("#s-promo-campaign").value;
+      const promoMode = $("#s-promo-mode").checked;
+
+      // Platform text & length badge
+      $("#preview-seconds-badge").textContent = `${seconds} วินาที`;
+      if (mode === "image") {
+        $("#preview-platform-tag").textContent = "ภาพโปรโมทนิ่ง";
+        $("#preview-seconds-badge").style.display = "none";
+      } else {
+        $("#preview-platform-tag").textContent = "Reels / Shorts";
+        $("#preview-seconds-badge").style.display = "inline-block";
+      }
+
+      // Graphic mock styling representation
+      const visualMock = $("#preview-video-visual");
+      const activePreset = document.querySelector(".preset-chip.active")?.dataset.preset || "";
+      const isGadget = activePreset.startsWith("gadget");
+
+      if (promoMode) {
+        visualMock.innerHTML = `🖼️ [ โปสเตอร์โปรโมท ] ${promoCampaign ? `“${esc(promoCampaign)}”` : ""}`;
+        visualMock.style.color = "var(--accent-promo)";
+      } else {
+        if (isGadget) {
+          visualMock.textContent = activePreset === "gadget_it" 
+            ? "🛒 [ วิดีโอผลิตภัณฑ์ไอที / แกดเจ็ตเคลื่อนไหวสมจริง ]" 
+            : "🏠 [ วิดีโอของใช้ในบ้าน / อุปกรณ์จัดระเบียบเคลื่อนไหวสมจริง ]";
+          visualMock.style.color = "var(--blue)";
+        } else {
+          const styleTexts = {
+            realistic: "🍛 [ วิดีโออาหารจริง เคลื่อนไหวสมจริง ]",
+            cartoon2d: "🎨 [ ภาพการ์ตูนสีสดใส มีตัวนำมาสคอต ]",
+            pixar3d: "🧸 [ การ์ตูน 3D คล้าย Pixar พรีเซนสินค้า ]",
+            story: "📖 [ ภาพวาดสีน้ำเล่าเรื่อง บรรยากาศอบอุ่น ]",
+            podcast: "🎙️ [ ภาพห้องสตูดิโอพอดแคสต์ โมโนโทน ]"
+          };
+          visualMock.textContent = styleTexts[style] || styleTexts.realistic;
+          visualMock.style.color = "";
+        }
+      }
+
+      // Title & captions preview
+      let titleText = "";
+      let hookText = "";
+
+      if (isGadget) {
+        if (activePreset === "gadget_it") {
+          titleText = "แกดเจ็ตตัวเด็ด! ยุคนี้ต้องมีติดตัวไว้ 💻";
+          hookText = "ใครสายไอทีห้ามพลาดเลยตัวนี้! ฟังก์ชันล้ำเกินคุ้ม ใช้งานง่าย ดีไซน์มินิมอล ช่วยให้ชีวิตคุณสบายขึ้น 10 เท่า...";
+        } else {
+          titleText = "ไอเทมลับจัดระเบียบบ้าน ให้สะอาดดูแพง 🏠";
+          hookText = "ป้ายยาของใช้ในบ้านสุดปัง! เปลี่ยนมุมห้องที่รกให้เรียบหรูสไตล์มินิมอล วัสดุแข็งแรงทนทานประกอบง่ายสุดๆ...";
+        }
+      } else {
+        const styleTitles = {
+          realistic: "รีวิวร้านลับย่านนี้ อร่อยคุ้มสุดฟิน 😋",
+          cartoon2d: "บุกร้านอร่อย! มาสคอตพากิน เมนูเด็ดกระแทกปาก 🎉",
+          pixar3d: "เรื่องเล่าจากหนูเชฟชวนชิม ของดีที่ต้องมาลอง ✨",
+          story: "กาลครั้งหนึ่ง... ความอร่อยที่ส่งต่อมานับร้อยปี 📖",
+          podcast: "EP1: พาคุยร้านอาหารลับย่านดัง อร่อยจริงไหม? 🎙️"
+        };
+        titleText = styleTitles[style] || styleTitles.realistic;
+
+        const styleHooks = {
+          realistic: "เตือนก่อนนะอย่าดูตอนดึก!🚨 ร้านนี้ให้เยอะสะใจคุ้มราคา เรตติ้ง 4.8 ดาวการันตีของจริง มื้อนี้อร่อยลืมฟินแน่นอน...",
+          cartoon2d: "ทุกคนน! วันนี้มาสคอตจะพาลุยร้านเด็ด ชานมไข่มุกเหนียวนุ่มหวานมันกำลังดี สีสันสดใสน่ารักจนใจละลาย...",
+          pixar3d: "เชฟจิ๋วตัวจริงแนะนำเองเลยเมนูนี้! รสชาติหวานนุ่มละมุนลิ้น คุ้มเกินราคา ใครเห็นก็น้ำลายสอชวนชิม...",
+          story: "ในป่าใหญ่แห่งรสชาติ ช็อคโกแลตอุ่นๆ พร้อมเค้กเบเกอรี่แสนหอมหวานถูกทำขึ้นมาอย่างพิถีพิถัน...",
+          podcast: "A: นึกว่าลือกันไปเอง ปรากฏว่าร้านปิ้งย่างนี้เนื้อดีมากจริง! B: ใช่พี่ คุ้มราคาเนื้อสไลด์บางเฉียบละลายในปาก..."
+        };
+        hookText = styleHooks[style] || styleHooks.realistic;
+      }
+
+      $("#preview-caption-title").textContent = titleText;
+      $("#preview-hook-text").textContent = hookText;
+
+      // Audio track sync
+      const voiceText = voice === "male" || voice.includes("Niwat") ? "🎙️ edge-tts: NiwatNeural (ชาย)" : "🎙️ edge-tts: PremwadeeNeural (หญิง)";
+      $("#preview-audio-voice").textContent = isVoice ? voiceText : "🔇 ปิดเสียงพากย์";
+      $("#preview-audio-music").textContent = isMusic ? `🎵 เพลงประกอบ (${Math.round(musicVol * 100)}%)` : "🔇 ปิดเพลงประกอบ";
+
+      // Volume bar width representation
+      const volFill = $("#preview-audio-fill");
+      if (volFill) {
+        if (!isVoice && !isMusic) volFill.style.width = "0%";
+        else if (isVoice && !isMusic) volFill.style.width = "40%";
+        else if (!isVoice && isMusic) volFill.style.width = `${musicVol * 50}%`;
+        else volFill.style.width = `${40 + (musicVol * 40)}%`;
+      }
+    };
+
+    // Bind change listeners to update live preview
+    const syncInputs = ["s-content-style", "s-tts-voice", "s-music-volume", "s-enable-music", "s-enable-voiceover", "s-video-seconds", "s-video-mode", "s-promo-campaign", "s-promo-mode"];
+    syncInputs.forEach(id => {
+      const el = $(`#${id}`);
+      if (el) el.onchange = updatePreview;
+      if (el) el.oninput = updatePreview;
+    });
+    updatePreview();
+
+    // 5. Quick Presets Chips binding
+    const presets = {
+      restaurant: { style: "realistic", video: "ffmpeg", voice: "th-TH-NiwatNeural", duration: 6, music_vol: 0.15, asmr_vol: 0.13, ratio: 2, voiceover: true, music: true },
+      cafe: { style: "realistic", video: "veo", voice: "th-TH-PremwadeeNeural", duration: 8, music_vol: 0.20, asmr_vol: 0.08, ratio: 1, voiceover: true, music: true },
+      bubbletea: { style: "cartoon2d", video: "ffmpeg", voice: "th-TH-PremwadeeNeural", duration: 5, music_vol: 0.25, asmr_vol: 0.05, ratio: 0, voiceover: true, music: true },
+      bakery: { style: "pixar3d", video: "ffmpeg", voice: "th-TH-PremwadeeNeural", duration: 7, music_vol: 0.18, asmr_vol: 0.07, ratio: 1, voiceover: true, music: true },
+      grill: { style: "realistic", video: "veo", voice: "th-TH-NiwatNeural", duration: 10, music_vol: 0.10, asmr_vol: 0.20, ratio: 3, voiceover: true, music: true },
+      clean: { style: "story", video: "image", voice: "th-TH-NiwatNeural", duration: 6, music_vol: 0.12, asmr_vol: 0.05, ratio: 1, voiceover: true, music: true },
+      japanese: { style: "realistic", video: "veo", voice: "th-TH-PremwadeeNeural", duration: 8, music_vol: 0.15, asmr_vol: 0.10, ratio: 2, voiceover: true, music: true },
+      gadget_it: { style: "realistic", video: "ffmpeg", voice: "th-TH-NiwatNeural", duration: 8, music_vol: 0.15, asmr_vol: 0.0, ratio: 0, voiceover: true, music: true },
+      gadget_home: { style: "realistic", video: "ffmpeg", voice: "th-TH-PremwadeeNeural", duration: 7, music_vol: 0.12, asmr_vol: 0.0, ratio: 0, voiceover: true, music: true }
+    };
+
+    const applyPresetValues = (presetKey) => {
+      const p = presets[presetKey];
+      if (!p) return;
+
+      $("#s-content-style").value = p.style;
+      $("#s-video-mode").value = p.video;
+      $("#s-tts-voice").value = p.voice;
+      $("#s-video-seconds").value = p.duration;
+      $("#s-music-volume").value = p.music_vol;
+      $("#s-asmr-volume").value = p.asmr_vol;
+      $("#s-stock-video-ratio").value = p.ratio;
+      $("#s-enable-voiceover").checked = p.voiceover;
+      $("#s-enable-music").checked = p.music;
+
+      // Update chips visual state
+      document.querySelectorAll(".preset-chip").forEach(chip => {
+        if (chip.dataset.preset === presetKey) chip.classList.add("active");
+        else chip.classList.remove("active");
+      });
+
+      // Re-trigger layout updates
+      updateDisclosure();
+      updatePreview();
+      toast(`⚡ โหลดค่าด่วนของร้าน “${esc(presetKey)}” เรียบร้อยแล้ว`);
+    };
+
+    document.querySelectorAll(".preset-chip").forEach(chip => {
+      chip.onclick = () => {
+        applyPresetValues(chip.dataset.preset);
+      };
+    });
+
+    // 6. Wizard Mode Setup Machine
+    let currentWizardStep = 1;
+    const totalWizardSteps = 5;
+
+    const updateWizardStepUI = () => {
+      // Stepper nodes
+      document.querySelectorAll(".wizard-step-node").forEach(node => {
+        const stepNum = parseInt(node.dataset.step);
+        node.className = "wizard-step-node";
+        if (stepNum === currentWizardStep) {
+          node.classList.add("active");
+        } else if (stepNum < currentWizardStep) {
+          node.classList.add("completed");
+        }
+      });
+
+      // Panes
+      document.querySelectorAll(".wizard-pane").forEach(pane => {
+        if (parseInt(pane.dataset.step) === currentWizardStep) pane.classList.add("active");
+        else pane.classList.remove("active");
+      });
+
+      // Navigation buttons
+      if (currentWizardStep === 1) $("#wizard-btn-prev").style.display = "none";
+      else $("#wizard-btn-prev").style.display = "block";
+
+      if (currentWizardStep === totalWizardSteps) {
+        $("#wizard-btn-next").style.display = "none";
+        $("#wizard-btn-finish").style.display = "block";
+      } else {
+        $("#wizard-btn-next").style.display = "block";
+        $("#wizard-btn-finish").style.display = "none";
+      }
+    };
+
+    $("#toggle-wizard-mode").onchange = (e) => {
+      const wizardOn = e.target.checked;
+      const stepper = $("#wizard-stepper-wrap");
+      const classicForm = $("#classic-form-wrap");
+
+      if (wizardOn) {
+        stepper.style.display = "block";
+        classicForm.style.display = "none";
+        currentWizardStep = 1;
+        updateWizardStepUI();
+      } else {
+        stepper.style.display = "none";
+        classicForm.style.display = "block";
+      }
+    };
+
+    $("#wizard-btn-prev").onclick = () => {
+      if (currentWizardStep > 1) {
+        currentWizardStep--;
+        updateWizardStepUI();
+      }
+    };
+
+    $("#wizard-btn-next").onclick = () => {
+      // Special action on Step 1: selection triggers preset values
+      if (currentWizardStep === 1) {
+        const selVal = $("#w-preset-select").value;
+        if (selVal) {
+          applyPresetValues(selVal);
+        }
+      }
+      
+      // Update from wizard fields to form fields
+      if (currentWizardStep === 2) {
+        $("#ai-provider").value = $("#w-ai-provider").value;
+      }
+      if (currentWizardStep === 3) {
+        $("#s-video-mode").value = $("#w-video-mode").value;
+        updateDisclosure();
+      }
+      if (currentWizardStep === 4) {
+        $("#s-enable-voiceover").checked = $("#w-enable-voiceover").checked;
+        $("#s-tts-voice").value = $("#w-tts-voice").value;
+        updateDisclosure();
+      }
+
+      if (currentWizardStep < totalWizardSteps) {
+        currentWizardStep++;
+        updateWizardStepUI();
+      }
+    };
+
+    $("#wizard-btn-finish").onclick = async () => {
+      // Trigger classic form save!
+      $("#btn-save-settings").click();
+    };
+
+    // 7. Save settings handler
+    $("#btn-save-settings").onclick = async () => {
+      const payload = {};
+
+      for (const [id, key] of Object.entries(textAndSelectKeys)) {
+        const el = $(`#${id}`);
+        if (el) {
+          payload[key] = el.value.trim();
+        }
+      }
+
+      for (const [id, key] of Object.entries(checkboxKeys)) {
+        const el = $(`#${id}`);
+        if (el) {
+          payload[key] = el.checked;
+        }
+      }
+
+      for (const [id, key] of Object.entries(passwordKeys)) {
+        const el = $(`#${id}`);
+        if (el && el.value.trim() !== "") {
+          payload[key] = el.value.trim();
+        }
+      }
+
+      try {
+        toast("กำลังบันทึกการตั้งค่า...");
+        await api("/settings/all", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        toast("💾 บันทึกการตั้งค่าและมีผลทันที!");
+        renderSettingsAi();
+        loadBanner().catch(() => {});
+        loadSystem().catch(() => {});
+        initAiProvider().catch(() => {});
+      } catch (e) {
+        toast(e.message, true);
+      }
+    };
+
+  } catch (e) {
+    toast("โหลดการตั้งค่าล้มเหลว: " + e.message, true);
+  } finally {
+    panel.style.opacity = "";
+    settingsLoading = false;
+  }
+}
+
 // ---------------- driver
 function render(tab) {
   ({ stores: renderStores, content: renderContent, posts: renderPosts,
      platform: renderPlatform, report: renderReport, flow: renderFlow,
-     flowvids: renderFlowVideos, insights: renderInsights, promo: renderPromo }[tab] || (() => {}))();
+     flowvids: renderFlowVideos, insights: renderInsights, promo: renderPromo,
+     "settings-ai": renderSettingsAi }[tab] || (() => {}))();
 }
 let liveStarted = false;
 function startLiveUpdates() {

@@ -314,10 +314,13 @@ def _prompt(store: dict, label: str, style: str = "realistic") -> str:
             f"- หากเป็นประเภทอื่น ๆ: ให้เน้นบรรยายความอร่อยเฉพาะตัวของเมนูนั้นๆ เป็นหลัก\n\n"
         )
 
+    extra = (settings.content_extra or "").strip()
+    extra_guidance = (f"⭐ คำสั่งพิเศษจากผู้ใช้ (สำคัญสุด ทำตามนี้ก่อนเป็นอันดับแรก):\n{extra}\n\n") if extra else ""
     return (
         f"เขียนคอนเทนต์ affiliate สำหรับร้านนี้ในกลุ่มตัวเลือก {label} (สำหรับ Facebook, Instagram, YouTube รวม 3 variants):\n"
         f"{_store_facts(store)}\n\n"
         f"{subtype_guidance}"
+        f"{extra_guidance}"
         f"{style_desc}\n\n"
         f"ข้อบังคับสำคัญ:\n"
         f"1. สร้างเฉพาะ variants ที่มีฟิลด์ label เป็น '{label}' เท่านั้น จำนวน 3 variants (platform ละ 1 ชิ้น)\n"
@@ -505,11 +508,36 @@ def _gemini_generate(store: dict, label: str, style: str = "realistic") -> tuple
     return data, 0.0
 
 
+def _openai_generate(store: dict, label: str, style: str = "realistic") -> tuple[dict, float]:
+    """เขียนคอนเทนต์ด้วย ChatGPT (OpenAI) — เรียก API ตรงผ่าน HTTP (ไม่ต้องลง SDK). ออก JSON."""
+    import urllib.request
+    prompt = (f"{SYSTEM}\n\n{_prompt(store, label, style)}\n\n"
+              f"ตอบกลับเป็น JSON เท่านั้น (ไม่มีข้อความอื่น ไม่มี markdown) ตามโครงนี้เป๊ะ:\n{_JSON_SKELETON}")
+    body = {"model": settings.openai_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.9}
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(body).encode("utf-8"), method="POST",
+        headers={"Authorization": f"Bearer {settings.openai_api_key}",
+                 "Content-Type": "application/json"})
+    r = urllib.request.urlopen(req, timeout=90)
+    j = json.loads(r.read().decode("utf-8"))
+    txt = j["choices"][0]["message"]["content"]
+    data = json.loads(_strip_json(txt) if "_strip_json" in globals() else txt)
+    usage = j.get("usage", {})
+    # ประมาณค่าใช้จ่าย (gpt-4o-mini ~ $0.15/1M in, $0.6/1M out) → บาท (~35)
+    cost = ((usage.get("prompt_tokens", 0) * 0.15 + usage.get("completion_tokens", 0) * 0.6) / 1e6) * 35
+    return data, round(cost, 4)
+
+
 def generate_content(store: dict, style: str | None = None) -> tuple[dict, float]:
     """คืน (ผลคอนเทนต์, ค่าใช้จ่ายโดยประมาณบาท). เลือก provider ตาม CONTENT_PROVIDER.
     style = แนวคอนเทนต์ (realistic/cartoon2d/pixar3d/story/podcast) — ไม่ระบุ → ใช้ store['content_style']
     หรือ CONTENT_STYLE จาก .env. หากมีปัญหาเรื่องคีย์หรือโควตาหมด จะแสดงข้อผิดพลาดจริงให้ผู้ใช้เห็นทันที."""
-    provider = settings.content_provider
+    from ..services import runtime_state
+    provider = runtime_state.get("content_provider", settings.content_provider)   # เลือกจากหน้าเว็บได้
     style = style or store.get("content_style") or settings.content_style or "realistic"
     if style not in STYLE_PRESETS:
         print(f"[content] style '{style}' ไม่รู้จัก → ใช้ realistic")
@@ -518,8 +546,15 @@ def generate_content(store: dict, style: str | None = None) -> tuple[dict, float
         raise RuntimeError("ไม่มีการตั้งค่า GEMINI_API_KEY หรือรูปแบบคีย์ไม่ถูกต้อง")
     if provider == "claude" and not settings.has_claude:
         raise RuntimeError("ไม่มีการตั้งค่า ANTHROPIC_API_KEY หรือรูปแบบคีย์ไม่ถูกต้อง")
+    if provider == "chatgpt" and not settings.has_openai:
+        raise RuntimeError("ไม่มีการตั้งค่า OPENAI_API_KEY (ต้องใส่ใน .env ก่อนใช้ ChatGPT)")
 
     try:
+        if provider == "chatgpt" and settings.has_openai:
+            data_A, cost_A = _openai_generate(store, "A", style)
+            data_B, cost_B = _openai_generate(store, "B", style)
+            data_A["variants"] = data_A.get("variants", []) + data_B.get("variants", [])
+            return data_A, cost_A + cost_B
         if provider == "gemini" and settings.has_gemini:
             # เจน A
             data_A, cost_A = _gemini_generate(store, "A", style)

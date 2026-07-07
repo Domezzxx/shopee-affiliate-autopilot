@@ -5,13 +5,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # AI brain — เลือกผู้เขียนคอนเทนต์: "gemini" (ฟรี) หรือ "claude" (จ่ายเงิน คุณภาพสูง)
+    # AI brain — เลือกผู้เขียนคอนเทนต์: "gemini" (ฟรี) | "claude" | "chatgpt" (เลือกจากหน้าเว็บได้)
     content_provider: str = "claude"
     anthropic_api_key: str = ""
     content_model: str = "claude-sonnet-4-6"
+    # ChatGPT / OpenAI (ทางเลือก) — ใส่ OPENAI_API_KEY ใน .env ถึงจะใช้ได้
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
     # CONTENT_STYLE: แนวคอนเทนต์ — realistic (อาหาร/สินค้าเหมือนจริง, ค่าเริ่มต้น) |
     #   cartoon2d (การ์ตูน 2D) | pixar3d (Pixar 3D) | story (นิทานเล่าเรื่อง) | podcast (คุยกัน 2 เสียง)
     content_style: str = "realistic"
+    # คำสั่งพิเศษจากผู้ใช้ (inject เข้า prompt ทุกครั้ง) — พิมพ์แนวเองได้ เช่น "เน้นแซ่บอีสาน ห้ามอิโมจิเยอะ"
+    content_extra: str = ""
 
     # Gemini media + (ตัวเลือก) เขียนข้อความฟรี
     gemini_api_key: str = ""
@@ -100,6 +105,20 @@ class Settings(BaseSettings):
     post_delay_max: int = 45
     auto_optimize_interval_min: int = 360
 
+    # AccessTrade (affiliate network) — Deeplink/Custom Creative API สร้างลิงก์ affiliate ต่อร้าน
+    # (แทน Shopee Open API ที่ขอไม่ผ่าน) — เอา key/siteId/campaignId จากแดชบอร์ด publisher.accesstrade.in.th
+    accesstrade_api_key: str = ""
+    accesstrade_api_base: str = "https://api.accesstrade.global"   # ปรับได้ถ้า TH ใช้โฮสต์อื่น
+    accesstrade_site_id: str = ""                 # Publisher Site ID
+    accesstrade_shopee_campaign_id: str = ""      # Campaign ID ของ Shopee (หลังสมัครแคมเปญ)
+    accesstrade_auth_scheme: str = "Token"        # Authorization: Token <key> (บางที่ใช้ Bearer)
+
+    # Passio (Ecomobi) — deeplink = ต่อสตริง goeco.mobi?token=..&url=.. (ไม่ต้องเรียก API/ไม่มี rate limit)
+    # เอา token จากเอกสาร API: affiliate.passio.eco -> Tools/API -> Getting Started
+    passio_token: str = ""
+    passio_token_private: str = ""
+    passio_base: str = "https://goeco.mobi"
+
     # Auto-Pilot — วงจรอัตโนมัติ (scrape→generate→post) ทำเองตามรอบ (Sprint 6 P2)
     autopilot_enabled: bool = False       # เปิด = ระบบประมวลผลร้านใหม่เองตามรอบ
     autopilot_interval_min: int = 120     # รอบ auto-pilot (นาที)
@@ -153,6 +172,10 @@ class Settings(BaseSettings):
         return bool(self.gemini_api_key)
 
     @property
+    def has_openai(self) -> bool:
+        return self.openai_api_key.startswith("sk-")
+
+    @property
     def has_veo(self) -> bool:
         """มีคีย์ Google AI จริง (ขึ้นต้น AIzaSy) ที่เรียก Veo API ได้ — คีย์ Flow/mock จะไม่ผ่าน."""
         return self.has_gemini and self.gemini_api_key.startswith("AIzaSy")
@@ -167,6 +190,26 @@ class Settings(BaseSettings):
         if self.content_provider == "gemini":
             return self.has_gemini
         return self.has_claude
+
+    def __getattribute__(self, item):
+        if item in (
+            "data_dir", "media_dir", "music_dir", "model_config", "_env_file",
+            "_env_nested_delimiter", "__dict__", "__fields__", "__private_attributes__",
+            "__annotations__", "__class__", "__repr__", "__str__", "__getattribute__",
+            "has_claude", "has_gemini", "has_openai", "has_veo", "has_meta", "content_ready",
+            "phone_list"
+        ):
+            return super().__getattribute__(item)
+
+        try:
+            from .services import runtime_state
+            val = runtime_state.get(item)
+            if val is not None:
+                return val
+        except Exception:
+            pass
+
+        return super().__getattribute__(item)
 
 
 settings = Settings()
